@@ -1,0 +1,52 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_URL")
+}
+
+model News {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  source    String
+  category  Category
+  newsDate  DateTime @map("news_date")
+  audioUrl  String?  @map("audio_url")
+  script    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([newsDate])
+  @@index([category])
+  @@map("news")
+}
+
+model SyncLog {
+  id           Int      @id @default(autoincrement())
+  syncDate     DateTime @unique @map("sync_date")
+  status       Status
+  newsCount    Int      @default(0) @map("news_count")
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("sync_logs")
+}
+
+enum Category {
+  DOMESTIC
+  INTERNATIONAL
+}
+
+enum Status {
+  SUCCESS
+  FAILED
+  PARTIAL
+}
