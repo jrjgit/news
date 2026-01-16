@@ -1,12 +1,18 @@
-import { EdgeTTS as EdgeTTSClient } from 'edge-tts-universal'
+import * as sdk from 'microsoft-cognitiveservices-speech-sdk'
 import { put, del, list } from '@vercel/blob'
 
-export class EdgeTTS {
-  private voiceName: string
+export class AzureTTS {
+  private speechConfig: sdk.SpeechConfig
   private useBlob: boolean
 
   constructor() {
-    this.voiceName = process.env.EDGE_TTS_VOICE || 'zh-CN-XiaoxiaoNeural'
+    const speechKey = process.env.AZURE_SPEECH_KEY || ''
+    const speechRegion = process.env.AZURE_SPEECH_REGION || 'eastasia'
+
+    this.speechConfig = sdk.SpeechConfig.fromSubscription(speechKey, speechRegion)
+    this.speechConfig.speechSynthesisVoiceName = process.env.AZURE_VOICE_NAME || 'zh-CN-XiaoxiaoNeural'
+    this.speechConfig.speechSynthesisOutputFormat = sdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
+
     this.useBlob = process.env.NODE_ENV === 'production' && !!process.env.BLOB_READ_WRITE_TOKEN
   }
 
@@ -21,7 +27,7 @@ export class EdgeTTS {
         }
       }
 
-      // 使用 edge-tts 生成音频
+      // 使用Azure TTS生成音频
       const audioBuffer = await this.synthesizeSpeech(text)
 
       console.log(`音频生成成功: ${filename}`)
@@ -50,16 +56,28 @@ export class EdgeTTS {
     }
   }
 
-  private async synthesizeSpeech(text: string): Promise<Buffer> {
-    const tts = new EdgeTTSClient(text, this.voiceName, {
-      rate: '+0%',
-      volume: '+0%',
-      pitch: '+0Hz',
-    })
+  private synthesizeSpeech(text: string): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const synthesizer = new sdk.SpeechSynthesizer(this.speechConfig)
 
-    const result = await tts.synthesize()
-    const audioBuffer = Buffer.from(await result.audio.arrayBuffer())
-    return audioBuffer
+      synthesizer.speakTextAsync(
+        text,
+        (result) => {
+          if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
+            const audioData = result.audioData
+            resolve(Buffer.from(audioData))
+          } else {
+            reject(new Error(`语音合成失败: ${result.errorDetails}`))
+          }
+          synthesizer.close()
+        },
+        (error) => {
+          console.error('语音合成错误:', error)
+          reject(error)
+          synthesizer.close()
+        }
+      )
+    })
   }
 
   async generateDailyNewsAudio(script: string, date: string): Promise<string> {
@@ -94,4 +112,4 @@ export class EdgeTTS {
   }
 }
 
-export const edgeTTS = new EdgeTTS()
+export const azureTTS = new AzureTTS()

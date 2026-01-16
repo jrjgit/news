@@ -2,7 +2,7 @@ import cron from 'node-cron'
 import { prisma } from '@/lib/db'
 import { rssParser } from '@/lib/rss-parser'
 import { newsGenerator } from '@/lib/news-generator'
-import { edgeTTS } from '@/lib/tts'
+import { azureTTS } from '@/lib/tts'
 
 export async function syncNews() {
   const today = new Date()
@@ -37,14 +37,14 @@ export async function syncNews() {
     const script = newsGenerator.generateScript(domestic, international)
 
     // 生成音频
-    const audioUrl = await edgeTTS.generateDailyNewsAudio(script, dateStr)
+    const audioUrl = await azureTTS.generateDailyNewsAudio(script, dateStr)
 
     // 保存新闻到数据库
     const savedNews = []
 
     for (const news of [...domestic, ...international]) {
       const individualScript = newsGenerator.generateIndividualScript(news)
-      const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, savedNews.length + 1)
+      const newsAudioUrl = await azureTTS.generateIndividualNewsAudio(individualScript, savedNews.length + 1)
 
       const saved = await prisma.news.create({
         data: {
@@ -115,7 +115,7 @@ async function cleanupOldData(retentionDays: number) {
   })
 
   // 清理旧音频文件
-  await edgeTTS.cleanupOldAudio(retentionDays)
+  await azureTTS.cleanupOldAudio(retentionDays)
 
   console.log(`清理完成: 删除 ${deletedNews.count} 条新闻，${deletedLogs.count} 条日志`)
 }

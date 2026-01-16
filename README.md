@@ -6,7 +6,7 @@
 
 - 📰 **自动新闻聚合**: 每日自动抓取昨日热点新闻（国内7条、国际3条）
 - 🎙️ **播客风格播报**: 将新闻内容转换为口语化的播报文案
-- 🔊 **AI语音合成**: 使用 Microsoft Edge TTS 生成高质量语音播报
+- 🔊 **AI语音合成**: 使用Azure TTS生成磁性女声播报
 - ⏰ **定时更新**: 每天凌晨2点自动执行更新任务
 - 🎨 **美观界面**: 现代化深色主题UI设计，支持音频播放和原文阅读
 - 📱 **响应式设计**: 完美支持桌面和移动设备
@@ -19,7 +19,7 @@
 - **数据库**: Vercel Postgres (PostgreSQL) + Prisma ORM
 - **定时任务**: Vercel Cron Jobs
 - **RSS解析**: rss-parser
-- **语音合成**: Microsoft Edge TTS (edge-tts-universal)
+- **语音合成**: Azure Cognitive Services Speech SDK
 - **存储**: Vercel Blob
 
 ## 快速开始
@@ -41,7 +41,9 @@ npm install
 创建 `.env` 文件并添加以下内容:
 ```env
 POSTGRES_URL=postgresql://user:password@localhost:5432/news_db
-EDGE_TTS_VOICE=zh-CN-XiaoxiaoNeural
+AZURE_SPEECH_KEY=your-azure-speech-key
+AZURE_SPEECH_REGION=eastasia
+AZURE_VOICE_NAME=zh-CN-XiaoxiaoNeural
 RSS_SOURCES_DOMESTIC=https://www.people.com.cn/rss/politics.xml,https://www.xinhuanet.com/rss/news.xml
 RSS_SOURCES_INTERNATIONAL=https://www.bbc.com/rss/news
 DATA_RETENTION_DAYS=3
@@ -78,14 +80,22 @@ npm run dev
 1. 在 **Storage** 标签，点击 **Create Database** → 选择 **Blob**
 2. 创建后复制 `BLOB_READ_WRITE_TOKEN` 到环境变量
 
-### 4. 配置环境变量
+### 4. 获取Azure TTS密钥
+
+1. 访问 [Azure Portal](https://portal.azure.com)
+2. 创建 **Speech Service** 资源
+3. 复制密钥和区域到环境变量
+
+### 5. 配置环境变量
 
 在Vercel项目设置中添加以下环境变量:
 
 ```
 POSTGRES_URL=postgresql://user:password@host:5432/dbname
 BLOB_READ_WRITE_TOKEN=vercel_blob_xxxxxxxxx
-EDGE_TTS_VOICE=zh-CN-XiaoxiaoNeural
+AZURE_SPEECH_KEY=your-azure-speech-key
+AZURE_SPEECH_REGION=eastasia
+AZURE_VOICE_NAME=zh-CN-XiaoxiaoNeural
 RSS_SOURCES_DOMESTIC=https://www.people.com.cn/rss/politics.xml,https://www.xinhuanet.com/rss/news.xml
 RSS_SOURCES_INTERNATIONAL=https://www.bbc.com/rss/news
 DATA_RETENTION_DAYS=3
@@ -155,7 +165,9 @@ news/
 |--------|------|------|
 | POSTGRES_URL | PostgreSQL连接字符串 | ✅ |
 | BLOB_READ_WRITE_TOKEN | Vercel Blob存储Token | ✅ |
-| EDGE_TTS_VOICE | Edge TTS语音名称 | ❌ |
+| AZURE_SPEECH_KEY | Azure Speech Service密钥 | ✅ |
+| AZURE_SPEECH_REGION | Azure区域（如eastasia） | ✅ |
+| AZURE_VOICE_NAME | TTS语音名称 | ❌ |
 | RSS_SOURCES_DOMESTIC | 国内新闻RSS源 | ❌ |
 | RSS_SOURCES_INTERNATIONAL | 国际新闻RSS源 | ❌ |
 | DATA_RETENTION_DAYS | 数据保留天数 | ❌ |
@@ -166,12 +178,12 @@ news/
 |------|---------|------|
 | Vercel Postgres | 500MB存储 | 足够存储新闻数据 |
 | Vercel Blob | 500GB存储 | 足够存储音频文件 |
-| Edge TTS | 完全免费 | 使用 Microsoft Edge 在线服务 |
+| Azure TTS | 5小时/月免费 | 每天约10分钟播报 |
 | Vercel Functions | 100GB带宽/月 | 足够个人使用 |
 
 ## 注意事项
 
-1. **Edge TTS**: 使用 Microsoft Edge 在线 TTS 服务，无需配置密钥
+1. **Azure TTS免费额度**: 每月5小时，如果超出会产生费用
 2. **Cron Jobs**: Vercel Cron Jobs每天最多执行一次
 3. **音频文件**: 使用Blob存储，自动清理3天前的文件
 4. **数据库**: Vercel Postgres自动备份，无需手动管理
