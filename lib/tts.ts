@@ -1,18 +1,12 @@
-import * as sdk from 'microsoft-cognitiveservices-speech-sdk'
+import { EdgeTTS as EdgeTTSClient } from 'edge-tts-universal'
 import { put, del, list } from '@vercel/blob'
 
-export class AzureTTS {
-  private speechConfig: sdk.SpeechConfig
+export class EdgeTTS {
+  private voiceName: string
   private useBlob: boolean
 
   constructor() {
-    const speechKey = process.env.AZURE_SPEECH_KEY || ''
-    const speechRegion = process.env.AZURE_SPEECH_REGION || 'eastasia'
-
-    this.speechConfig = sdk.SpeechConfig.fromSubscription(speechKey, speechRegion)
-    this.speechConfig.speechSynthesisVoiceName = process.env.AZURE_VOICE_NAME || 'zh-CN-XiaoxiaoNeural'
-    this.speechConfig.speechSynthesisOutputFormat = sdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
-
+    this.voiceName = process.env.EDGE_TTS_VOICE || 'zh-CN-XiaoxiaoNeural'
     this.useBlob = process.env.NODE_ENV === 'production' && !!process.env.BLOB_READ_WRITE_TOKEN
   }
 
@@ -27,7 +21,7 @@ export class AzureTTS {
         }
       }
 
-      // 使用Azure TTS生成音频
+      // 使用 edge-tts 生成音频
       const audioBuffer = await this.synthesizeSpeech(text)
 
       console.log(`音频生成成功: ${filename}`)
@@ -56,28 +50,16 @@ export class AzureTTS {
     }
   }
 
-  private synthesizeSpeech(text: string): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      const synthesizer = new sdk.SpeechSynthesizer(this.speechConfig)
-
-      synthesizer.speakTextAsync(
-        text,
-        (result) => {
-          if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-            const audioData = result.audioData
-            resolve(Buffer.from(audioData))
-          } else {
-            reject(new Error(`语音合成失败: ${result.errorDetails}`))
-          }
-          synthesizer.close()
-        },
-        (error) => {
-          console.error('语音合成错误:', error)
-          reject(error)
-          synthesizer.close()
-        }
-      )
+  private async synthesizeSpeech(text: string): Promise<Buffer> {
+    const tts = new EdgeTTSClient(text, this.voiceName, {
+      rate: '+0%',
+      volume: '+0%',
+      pitch: '+0Hz',
     })
+
+    const result = await tts.synthesize()
+    const audioBuffer = Buffer.from(await result.audio.arrayBuffer())
+    return audioBuffer
   }
 
   async generateDailyNewsAudio(script: string, date: string): Promise<string> {
@@ -112,4 +94,4 @@ export class AzureTTS {
   }
 }
 
-export const azureTTS = new AzureTTS()
+export const edgeTTS = new EdgeTTS()
