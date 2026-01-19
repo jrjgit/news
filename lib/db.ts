@@ -4,7 +4,7 @@ import pg from 'pg'
 import { withAccelerate } from '@prisma/extension-accelerate'
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+  prisma: ReturnType<typeof createPrismaClient> | undefined
 }
 
 const createPrismaClient = () => {
@@ -13,7 +13,7 @@ const createPrismaClient = () => {
     adapter,
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   })
-  return client.$extends(withAccelerate()) as any
+  return client.$extends(withAccelerate())
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient()
