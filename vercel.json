@@ -1,1 +1,1 @@
-{"buildCommand": "prisma generate && next build", "env": {"POSTGRES_URL": "@POSTGRES_URL_PRISMA_DATABASE_URL"}, "functions": {"app/api/**": {"memory": 1024, "maxDuration": 60}}, "crons": [{"path": "/api/sync", "schedule": "0 2 * * *"}]}
+{"buildCommand": "prisma generate && next build", "env": {"POSTGRES_URL": "@postgres-url"}, "functions": {"app/api/**": {"memory": 1024, "maxDuration": 60}}, "crons": [{"path": "/api/sync", "schedule": "0 2 * * *"}]}
