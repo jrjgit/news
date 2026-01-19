@@ -8,7 +8,12 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 const createPrismaClient = () => {
-  const adapter = new PrismaPg(pg)
+  const connectionString = process.env.POSTGRES_URL
+  if (!connectionString) {
+    throw new Error('POSTGRES_URL environment variable is not set')
+  }
+  
+  const adapter = new PrismaPg(new pg.Pool({ connectionString }))
   const client = new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
