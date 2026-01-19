@@ -9,7 +9,7 @@ const createPrismaClient = () => {
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   })
-  return client.$extends(withAccelerate())
+  return client.$extends(withAccelerate()) as any
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient()

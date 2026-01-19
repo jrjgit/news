@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'asc',
       },
-    }) as any
+    })
 
     return NextResponse.json({
       success: true,
