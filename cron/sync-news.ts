@@ -42,10 +42,17 @@ export async function syncNews() {
     // 保存新闻到数据库
     const savedNews = []
 
-    for (const news of [...domestic, ...international]) {
+    // 并行生成音频（优化性能）
+    const audioPromises = [...domestic, ...international].map(async (news, index) => {
       const individualScript = newsGenerator.generateIndividualScript(news)
-      const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, savedNews.length + 1)
+      const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, index + 1)
+      return { news, audioUrl: newsAudioUrl, script: individualScript }
+    })
 
+    const audioResults = await Promise.all(audioPromises)
+
+    // 保存到数据库
+    for (const { news, audioUrl, script } of audioResults) {
       const saved = await prisma.news.create({
         data: {
           title: news.title,
@@ -53,8 +60,8 @@ export async function syncNews() {
           source: news.source,
           category: news.category,
           newsDate: today,
-          audioUrl: newsAudioUrl,
-          script: individualScript,
+          audioUrl,
+          script,
         },
       })
 
