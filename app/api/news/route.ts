@@ -11,12 +11,29 @@ export async function GET(request: NextRequest) {
     const where: any = {}
 
     if (date) {
-      where.newsDate = new Date(date)
+      // 使用日期范围查询，忽略时间部分
+      const targetDate = new Date(date)
+      const startDate = new Date(targetDate)
+      startDate.setHours(0, 0, 0, 0)
+      const endDate = new Date(targetDate)
+      endDate.setHours(23, 59, 59, 999)
+
+      where.newsDate = {
+        gte: startDate,
+        lte: endDate,
+      }
     } else {
       // 默认返回今天的新闻
       const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      where.newsDate = today
+      const startDate = new Date(today)
+      startDate.setHours(0, 0, 0, 0)
+      const endDate = new Date(today)
+      endDate.setHours(23, 59, 59, 999)
+
+      where.newsDate = {
+        gte: startDate,
+        lte: endDate,
+      }
     }
 
     if (category) {
