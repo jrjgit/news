@@ -22,7 +22,21 @@ export class RSSParser {
 
   async parseRSSFeed(url: string, source: string, category: 'DOMESTIC' | 'INTERNATIONAL'): Promise<NewsItem[]> {
     try {
-      const feed = await this.parser.parseURL(url)
+      // 手动获取 RSS 内容，添加 User-Agent
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        },
+        signal: AbortSignal.timeout(30000),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const xml = await response.text()
+      const feed = await this.parser.parseString(xml)
       const items: NewsItem[] = []
 
       for (const item of feed.items) {

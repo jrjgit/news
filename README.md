@@ -42,8 +42,8 @@ npm install
 ```env
 POSTGRES_URL=postgresql://user:password@localhost:5432/news_db
 EDGE_TTS_VOICE=zh-CN-XiaoxiaoNeural
-RSS_SOURCES_DOMESTIC=https://www.people.com.cn/rss/politics.xml,https://www.xinhuanet.com/rss/news.xml
-RSS_SOURCES_INTERNATIONAL=https://www.bbc.com/rss/news
+RSS_SOURCES_DOMESTIC=https://rsshub.app/36kr/news/latest,https://rsshub.app/cnbeta/latest,https://rsshub.app/zhihu/news
+RSS_SOURCES_INTERNATIONAL=https://feeds.bbci.co.uk/news/world/rss.xml,https://feeds.npr.org/1001/rss.xml,https://www.theguardian.com/world/rss
 DATA_RETENTION_DAYS=3
 ```
 
@@ -86,8 +86,8 @@ npm run dev
 POSTGRES_URL=postgresql://user:password@host:5432/dbname
 BLOB_READ_WRITE_TOKEN=vercel_blob_xxxxxxxxx
 EDGE_TTS_VOICE=zh-CN-XiaoxiaoNeural
-RSS_SOURCES_DOMESTIC=https://www.people.com.cn/rss/politics.xml,https://www.xinhuanet.com/rss/news.xml
-RSS_SOURCES_INTERNATIONAL=https://www.bbc.com/rss/news
+RSS_SOURCES_DOMESTIC=https://rsshub.app/36kr/news/latest,https://rsshub.app/cnbeta/latest,https://rsshub.app/zhihu/news
+RSS_SOURCES_INTERNATIONAL=https://feeds.bbci.co.uk/news/world/rss.xml,https://feeds.npr.org/1001/rss.xml,https://www.theguardian.com/world/rss
 DATA_RETENTION_DAYS=3
 ```
 
