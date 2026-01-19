@@ -21,7 +21,7 @@ export async function GET(
 
     const news = await prisma.news.findUnique({
       where: { id },
-    })
+    }) as any
 
     if (!news) {
       return NextResponse.json(

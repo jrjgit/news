@@ -14,7 +14,7 @@ export async function syncNews() {
     // 检查今日是否已同步
     const existingLog = await prisma.syncLog.findUnique({
       where: { syncDate: today },
-    })
+    }) as any
 
     if (existingLog) {
       console.log('今日新闻已同步，跳过')
@@ -56,7 +56,7 @@ export async function syncNews() {
           audioUrl: newsAudioUrl,
           script: individualScript,
         },
-      })
+      }) as any
 
       savedNews.push(saved)
     }
@@ -68,7 +68,7 @@ export async function syncNews() {
         status: 'SUCCESS',
         newsCount: savedNews.length,
       },
-    })
+    }) as any
 
     // 清理旧数据
     const retentionDays = parseInt(process.env.DATA_RETENTION_DAYS || '3')
@@ -86,7 +86,7 @@ export async function syncNews() {
         newsCount: 0,
         errorMessage: error instanceof Error ? error.message : '未知错误',
       },
-    })
+    }) as any
 
     throw error
   }
@@ -103,7 +103,7 @@ async function cleanupOldData(retentionDays: number) {
         lt: cutoffDate,
       },
     },
-  })
+  }) as any
 
   // 删除旧日志
   const deletedLogs = await prisma.syncLog.deleteMany({
@@ -112,7 +112,7 @@ async function cleanupOldData(retentionDays: number) {
         lt: cutoffDate,
       },
     },
-  })
+  }) as any
 
   // 清理旧音频文件
   await edgeTTS.cleanupOldAudio(retentionDays)
