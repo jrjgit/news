@@ -13,18 +13,23 @@ datasource db {
 }
 
 model News {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String
-  source    String
-  category  Category
-  newsDate  DateTime @map("news_date")
-  audioUrl  String?  @map("audio_url")
-  script    String?
-  createdAt DateTime @default(now()) @map("created_at")
+  id                Int      @id @default(autoincrement())
+  title             String
+  content           String
+  summary           String?  @db.Text
+  translatedContent String?  @map("translated_content") @db.Text
+  originalLink      String?  @map("original_link")
+  source            String
+  category          Category
+  importance        Int?     @default(3)
+  newsDate          DateTime @map("news_date")
+  audioUrl          String?  @map("audio_url")
+  script            String?
+  createdAt         DateTime @default(now()) @map("created_at")
 
   @@index([newsDate])
   @@index([category])
+  @@index([importance])
   @@map("news")
 }
 

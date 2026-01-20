@@ -3,6 +3,8 @@ import Parser from 'rss-parser'
 export interface NewsItem {
   title: string
   content: string
+  summary?: string
+  translatedContent?: string
   source: string
   category: 'DOMESTIC' | 'INTERNATIONAL'
   link?: string
@@ -94,10 +96,96 @@ export class RSSParser {
       allNews.push(...news)
     }
 
-    return allNews
+    // 去重
+    return this.deduplicateNews(allNews)
+  }
+
+  /**
+   * 新闻去重 - 基于标题相似度
+   * 使用简单的字符串包含关系和编辑距离算法
+   */
+  private deduplicateNews(newsItems: NewsItem[]): NewsItem[] {
+    const deduplicated: NewsItem[] = []
+    const seenTitles: string[] = []
+
+    for (const item of newsItems) {
+      const title = item.title.toLowerCase().trim()
+
+      // 检查是否与已见过的标题相似
+      const isDuplicate = seenTitles.some(seenTitle => {
+        // 如果一个标题完全包含另一个标题，认为是重复
+        if (title.includes(seenTitle) || seenTitle.includes(title)) {
+          return true
+        }
+
+        // 计算简化的相似度（基于字符重叠）
+        const similarity = this.calculateSimilarity(title, seenTitle)
+        return similarity > 0.8 // 80%相似度阈值
+      })
+
+      if (!isDuplicate) {
+        deduplicated.push(item)
+        seenTitles.push(title)
+      }
+    }
+
+    console.log(`去重: ${newsItems.length} -> ${deduplicated.length}`)
+    return deduplicated
+  }
+
+  /**
+   * 计算两个字符串的相似度（0-1）
+   * 基于字符重叠的简化算法
+   */
+  private calculateSimilarity(str1: string, str2: string): number {
+    if (str1 === str2) return 1
+    if (str1.length === 0 || str2.length === 0) return 0
+
+    const longer = str1.length > str2.length ? str1 : str2
+    const shorter = str1.length > str2.length ? str2 : str1
+
+    if (longer.length === 0) return 1
+
+    const editDistance = this.levenshteinDistance(longer, shorter)
+    return (longer.length - editDistance) / longer.length
+  }
+
+  /**
+   * Levenshtein编辑距离算法
+   */
+  private levenshteinDistance(str1: string, str2: string): number {
+    const matrix: number[][] = []
+
+    for (let i = 0; i <= str2.length; i++) {
+      matrix[i] = [i]
+    }
+
+    for (let j = 0; j <= str1.length; j++) {
+      matrix[0][j] = j
+    }
+
+    for (let i = 1; i <= str2.length; i++) {
+      for (let j = 1; j <= str1.length; j++) {
+        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1]
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          )
+        }
+      }
+    }
+
+    return matrix[str2.length][str1.length]
   }
 
   selectDailyNews(newsItems: NewsItem[]): { domestic: NewsItem[]; international: NewsItem[] } {
+    // 从环境变量读取配置，默认为15条国内+10条国际
+    const domesticCount = parseInt(process.env.NEWS_COUNT_DOMESTIC || '15', 10)
+    const internationalCount = parseInt(process.env.NEWS_COUNT_INTERNATIONAL || '10', 10)
+
     // 按发布时间排序，取最新的
     const sorted = newsItems.sort((a, b) => {
       const dateA = a.pubDate?.getTime() || 0
@@ -105,9 +193,10 @@ export class RSSParser {
       return dateB - dateA
     })
 
-    const domestic = sorted.filter(item => item.category === 'DOMESTIC').slice(0, 7)
-    const international = sorted.filter(item => item.category === 'INTERNATIONAL').slice(0, 3)
+    const domestic = sorted.filter(item => item.category === 'DOMESTIC').slice(0, domesticCount)
+    const international = sorted.filter(item => item.category === 'INTERNATIONAL').slice(0, internationalCount)
 
+    console.log(`选择新闻: ${domestic.length}条国内, ${international.length}条国际`)
     return { domestic, international }
   }
 }

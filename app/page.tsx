@@ -3,13 +3,21 @@
 import { useState, useEffect } from 'react'
 import Header from '@/components/Header'
 import NewsCard from '@/components/NewsCard'
+import SearchBar from '@/components/SearchBar'
+import FilterPanel, {
+  SortOption,
+  SortOrder,
+  CategoryFilter,
+} from '@/components/FilterPanel'
 
 interface News {
   id: number
   title: string
   content: string
+  summary?: string
   source: string
   category: 'DOMESTIC' | 'INTERNATIONAL'
+  importance?: number
   newsDate: string
   audioUrl: string | null
   script: string | null
@@ -21,14 +29,53 @@ export default function Home() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
 
+  // 搜索和筛选状态
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState<SortOption>('importance')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL')
+
+  // 收藏功能
+  const [favorites, setFavorites] = useState<number[]>([])
+
+  // 加载收藏列表
+  useEffect(() => {
+    const saved = localStorage.getItem('news-favorites')
+    if (saved) {
+      setFavorites(JSON.parse(saved))
+    }
+  }, [])
+
+  // 保存收藏列表
+  useEffect(() => {
+    localStorage.setItem('news-favorites', JSON.stringify(favorites))
+  }, [favorites])
+
+  // 切换收藏状态
+  const toggleFavorite = (newsId: number) => {
+    setFavorites((prev) =>
+      prev.includes(newsId) ? prev.filter((id) => id !== newsId) : [...prev, newsId]
+    )
+  }
+
   useEffect(() => {
     fetchNews()
-  }, [selectedDate])
+  }, [selectedDate, sortBy, sortOrder, categoryFilter])
 
   const fetchNews = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/news?date=${selectedDate}`)
+      const params = new URLSearchParams({
+        date: selectedDate,
+        sortBy,
+        order: sortOrder,
+      })
+
+      if (categoryFilter !== 'ALL' && categoryFilter !== 'FAVORITES') {
+        params.append('category', categoryFilter)
+      }
+
+      const response = await fetch(`/api/news?${params.toString()}`)
       const data = await response.json()
 
       if (data.success) {
@@ -67,61 +114,224 @@ export default function Home() {
     }
   }
 
-  const domesticNews = news.filter(n => n.category === 'DOMESTIC')
-  const internationalNews = news.filter(n => n.category === 'INTERNATIONAL')
+  // 过滤和搜索新闻
+  const filteredNews = news.filter((item) => {
+    // 搜索过滤
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      const matchesSearch =
+        item.title.toLowerCase().includes(query) ||
+        item.content.toLowerCase().includes(query) ||
+        (item.summary && item.summary.toLowerCase().includes(query))
+
+      if (!matchesSearch) return false
+    }
+
+    return true
+  })
+
+  // 按分类分组
+  const domesticNews = filteredNews.filter((n) => n.category === 'DOMESTIC')
+  const internationalNews = filteredNews.filter((n) => n.category === 'INTERNATIONAL')
+
+  // 收藏的新闻
+  const favoriteNews = filteredNews.filter((n) => favorites.includes(n.id))
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
       <Header onSync={handleSync} isSyncing={isSyncing} />
 
       <main className="container mx-auto px-4 py-8">
-        {/* 日期选择器 */}
-        <div className="mb-8">
-          <label className="block text-gray-400 text-sm mb-2">选择日期</label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:border-blue-500 focus:outline-none"
+        {/* 控制面板 */}
+        <div className="mb-8 space-y-6">
+          {/* 日期选择器 */}
+          <div className="flex flex-wrap items-center gap-4">
+            <div>
+              <label className="block text-gray-400 text-sm mb-2">选择日期</label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 focus:border-blue-500 focus:outline-none transition-colors"
+              />
+            </div>
+
+            {/* 收藏切换 */}
+            <div className="flex-1 flex justify-end">
+              <button
+                onClick={() => {
+                  if (categoryFilter === 'FAVORITES') {
+                    setCategoryFilter('ALL')
+                  } else if (favorites.length > 0) {
+                    setCategoryFilter('FAVORITES')
+                  }
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                  categoryFilter === 'FAVORITES' || favorites.length > 0
+                    ? 'bg-pink-600 text-white shadow-lg shadow-pink-600/30'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill={categoryFilter === 'FAVORITES' || favorites.length > 0 ? 'currentColor' : 'none'}
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                  />
+                </svg>
+                {categoryFilter === 'FAVORITES' ? '我的收藏' : favorites.length > 0 ? `收藏 (${favorites.length})` : '收藏'}
+              </button>
+            </div>
+          </div>
+
+          {/* 搜索栏 */}
+          <div className="max-w-2xl">
+            <SearchBar onSearch={setSearchQuery} placeholder="搜索新闻标题、内容或摘要..." />
+          </div>
+
+          {/* 筛选面板 */}
+          <FilterPanel
+            onSortChange={setSortBy}
+            onOrderChange={setSortOrder}
+            onCategoryChange={(category) => {
+              setCategoryFilter(category)
+            }}
+            currentSort={sortBy}
+            currentOrder={sortOrder}
+            currentCategory={categoryFilter}
           />
         </div>
 
+        {/* 加载状态 */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-600"></div>
+              <p className="mt-4 text-gray-400">加载中...</p>
+            </div>
           </div>
-        ) : news.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">暂无新闻数据</p>
-            <p className="text-gray-500 text-sm mt-2">点击"手动同步"按钮获取最新新闻</p>
+        ) : filteredNews.length === 0 ? (
+          <div className="text-center py-20">
+            <svg
+              className="w-24 h-24 mx-auto text-gray-700 mb-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1}
+                d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"
+              />
+            </svg>
+            <p className="text-gray-400 text-lg mb-2">
+              {searchQuery
+                ? '未找到匹配的新闻'
+                : categoryFilter === 'FAVORITES'
+                ? '暂无收藏的新闻'
+                : '暂无新闻数据'}
+            </p>
+            <p className="text-gray-500 text-sm">
+              {searchQuery
+                ? '尝试使用其他关键词搜索'
+                : categoryFilter === 'FAVORITES'
+                ? '点击新闻卡片上的收藏按钮添加收藏'
+                : '点击"手动同步"按钮获取最新新闻'}
+            </p>
           </div>
         ) : (
-          <div className="space-y-8">
-            {/* 国内新闻 */}
-            {domesticNews.length > 0 && (
+          <div className="space-y-12">
+            {/* 收藏的新闻 - 当选择FAVORITES筛选时显示 */}
+            {categoryFilter === 'FAVORITES' && favoriteNews.length > 0 && (
               <section>
-                <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-                  <span className="text-3xl">🇨🇳</span>
-                  国内新闻
+                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                  <span className="text-3xl">❤️</span>
+                  我的收藏
+                  <span className="text-sm font-normal text-gray-500">
+                    ({favoriteNews.length}条)
+                  </span>
                 </h2>
-                <div className="grid gap-4">
-                  {domesticNews.map(item => (
-                    <NewsCard key={item.id} news={item} />
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
+                  {favoriteNews.map((item) => (
+                    <NewsCard
+                      key={item.id}
+                      news={item}
+                      isFavorite={true}
+                      onToggleFavorite={() => toggleFavorite(item.id)}
+                    />
                   ))}
                 </div>
               </section>
             )}
 
-            {/* 国际新闻 */}
-            {internationalNews.length > 0 && (
+            {/* 收藏的新闻 - 非FAVORITES筛选时显示在顶部 */}
+            {categoryFilter !== 'FAVORITES' && favoriteNews.length > 0 && favorites.length > 0 && (
               <section>
-                <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                  <span className="text-3xl">❤️</span>
+                  我的收藏
+                </h2>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
+                  {favoriteNews.map((item) => (
+                    <NewsCard
+                      key={item.id}
+                      news={item}
+                      isFavorite={true}
+                      onToggleFavorite={() => toggleFavorite(item.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 国内新闻 - 非FAVORITES筛选时显示 */}
+            {categoryFilter !== 'FAVORITES' && domesticNews.length > 0 && (
+              <section>
+                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                  <span className="text-3xl">🇨🇳</span>
+                  国内新闻
+                  <span className="text-sm font-normal text-gray-500">
+                    ({domesticNews.length}条)
+                  </span>
+                </h2>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
+                  {domesticNews.map((item) => (
+                    <NewsCard
+                      key={item.id}
+                      news={item}
+                      isFavorite={favorites.includes(item.id)}
+                      onToggleFavorite={() => toggleFavorite(item.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+{/* 国际新闻 - 非FAVORITES筛选时显示 */}
+            {categoryFilter !== 'FAVORITES' && internationalNews.length > 0 && (
+              <section>
+                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
                   <span className="text-3xl">🌍</span>
                   国际新闻
+                  <span className="text-sm font-normal text-gray-500">
+                    ({internationalNews.length}条)
+                  </span>
                 </h2>
-                <div className="grid gap-4">
-                  {internationalNews.map(item => (
-                    <NewsCard key={item.id} news={item} />
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
+                  {internationalNews.map((item) => (
+                    <NewsCard
+                      key={item.id}
+                      news={item}
+                      isFavorite={favorites.includes(item.id)}
+                      onToggleFavorite={() => toggleFavorite(item.id)}
+                    />
                   ))}
                 </div>
               </section>

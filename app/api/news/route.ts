@@ -6,9 +6,17 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const date = searchParams.get('date')
     const category = searchParams.get('category')
+    const sortBy = searchParams.get('sortBy') || 'createdAt' // 支持: importance, createdAt, newsDate
+    const order = searchParams.get('order') || 'desc' // 支持: asc, desc
 
     // 构建查询条件
-    const where: any = {}
+    const where: {
+      newsDate?: {
+        gte: Date
+        lte: Date
+      }
+      category?: 'DOMESTIC' | 'INTERNATIONAL'
+    } = {}
 
     if (date) {
       // 使用日期范围查询，忽略时间部分
@@ -37,14 +45,45 @@ export async function GET(request: NextRequest) {
     }
 
     if (category) {
-      where.category = category.toUpperCase()
+      where.category = category.toUpperCase() as 'DOMESTIC' | 'INTERNATIONAL'
+    }
+
+    // 构建排序条件
+    const orderBy: Record<string, 'asc' | 'desc'> = {}
+    const validSortFields = ['importance', 'createdAt', 'newsDate']
+    const validOrder = ['asc', 'desc']
+
+    if (validSortFields.includes(sortBy) && validOrder.includes(order)) {
+      orderBy[sortBy] = order as 'asc' | 'desc'
+    } else {
+      // 默认排序
+      orderBy.createdAt = 'desc'
+    }
+
+    // 如果按重要性排序，重要性相同时按创建时间排序
+    if (sortBy === 'importance') {
+      orderBy.createdAt = 'desc'
     }
 
     // 查询新闻
     const news = await prisma.news.findMany({
       where,
-      orderBy: {
-        createdAt: 'asc',
+      orderBy,
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        summary: true,
+        translatedContent: true,
+        originalLink: true,
+        source: true,
+        category: true,
+        importance: true,
+
+        newsDate: true,
+        audioUrl: true,
+        script: true,
+        createdAt: true,
       },
     })
 
@@ -52,6 +91,10 @@ export async function GET(request: NextRequest) {
       success: true,
       data: news,
       count: news.length,
+      meta: {
+        sortBy,
+        order,
+      },
     })
   } catch (error) {
     console.error('获取新闻失败:', error)
