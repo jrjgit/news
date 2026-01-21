@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { newsGenerator } from '@/lib/news-generator'
+import { newsGenerator, NewsWithSummary } from '@/lib/news-generator'
 import { edgeTTS } from '@/lib/tts'
-import { prisma } from '@/lib/db'
+import { prisma, Status } from '@/lib/db'
 
 /**
  * 步骤4：保存到数据库
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       where: { syncDate: today },
     })
 
-    if (!syncLog || syncLog.status !== 'IN_PROGRESS') {
+    if (!syncLog || syncLog.status !== Status.IN_PROGRESS) {
       return NextResponse.json({
         success: false,
         error: '请先执行步骤3',
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 生成单条新闻音频
-    const audioPromises = newsWithImportance.map(async (news: any, index: number) => {
+    const audioPromises = newsWithImportance.map(async (news: NewsWithSummary, index: number) => {
       const individualScript = newsGenerator.generateIndividualScript(news)
       const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, index + 1)
       return { news, audioUrl: newsAudioUrl, script: individualScript }
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     await prisma.syncLog.update({
       where: { syncDate: today },
       data: {
-        status: 'SUCCESS',
+        status: Status.SUCCESS,
         newsCount: savedNews.length,
         errorMessage: null,
       },
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     await prisma.syncLog.update({
       where: { syncDate: new Date() },
       data: {
-        status: 'FAILED',
+        status: Status.FAILED,
         errorMessage: error instanceof Error ? error.message : '未知错误',
       },
     })

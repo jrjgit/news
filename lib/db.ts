@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Status } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 import { withAccelerate } from '@prisma/extension-accelerate'
@@ -23,5 +23,6 @@ const createPrismaClient = () => {
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient()
+export { Status }
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { newsGenerator, NewsWithSummary } from '@/lib/news-generator'
 import { edgeTTS } from '@/lib/tts'
-import { prisma } from '@/lib/db'
+import { prisma, Status } from '@/lib/db'
 
 /**
  * 步骤3：生成播报脚本和音频
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       where: { syncDate: today },
     })
 
-    if (!syncLog || syncLog.status !== 'IN_PROGRESS') {
+    if (!syncLog || syncLog.status !== Status.IN_PROGRESS) {
       return NextResponse.json({
         success: false,
         error: '请先执行步骤2',

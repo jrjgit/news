@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rssParser } from '@/lib/rss-parser'
 import { newsGenerator } from '@/lib/news-generator'
-import { prisma } from '@/lib/db'
+import { prisma, Status } from '@/lib/db'
 
 /**
  * 步骤1：获取和选择新闻
@@ -20,11 +20,19 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingLog) {
-      return NextResponse.json({
-        success: true,
-        message: '今日新闻已同步',
-        step: 1,
-        completed: true,
+      // 如果已成功完成，返回完成状态
+      if (existingLog.status === Status.SUCCESS) {
+        return NextResponse.json({
+          success: true,
+          message: '今日新闻已同步',
+          step: 1,
+          completed: true,
+        })
+      }
+      // 如果是失败或进行中状态，允许重新执行
+      // 删除旧的记录，重新开始
+      await prisma.syncLog.delete({
+        where: { syncDate: today },
       })
     }
 
@@ -40,7 +48,7 @@ export async function POST(request: NextRequest) {
     await prisma.syncLog.create({
       data: {
         syncDate: today,
-        status: 'IN_PROGRESS',
+        status: Status.IN_PROGRESS,
         newsCount: newsWithSummaries.length,
         errorMessage: JSON.stringify({ domestic, international, newsWithSummaries }),
       },

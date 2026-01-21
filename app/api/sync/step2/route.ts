@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { newsGenerator } from '@/lib/news-generator'
-import { prisma } from '@/lib/db'
+import { prisma, Status } from '@/lib/db'
 
 /**
  * 步骤2：翻译和评估重要性
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       where: { syncDate: today },
     })
 
-    if (!syncLog || syncLog.status !== 'IN_PROGRESS') {
+    if (!syncLog || syncLog.status !== Status.IN_PROGRESS) {
       return NextResponse.json({
         success: false,
         error: '请先执行步骤1',
