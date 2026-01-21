@@ -38,38 +38,65 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 生成单条新闻音频
+    // 生成单条新闻音频（带超时控制）
     const audioPromises = newsWithImportance.map(async (news: NewsWithSummary) => {
       const individualScript = newsGenerator.generateIndividualScript(news)
       // 使用新闻标题的哈希值作为文件名，避免重复
       const hash = Buffer.from(news.title).toString('base64').replace(/[+/=]/g, '').substring(0, 16)
-      const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, hash)
-      return { news, audioUrl: newsAudioUrl, script: individualScript }
+
+      // 添加30秒超时控制
+      const timeoutPromise = new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('音频生成超时')), 30000)
+      )
+
+      try {
+        const newsAudioUrl = await Promise.race([
+          edgeTTS.generateIndividualNewsAudio(individualScript, hash),
+          timeoutPromise,
+        ]) as string
+        return { news, audioUrl: newsAudioUrl, script: individualScript }
+      } catch (error) {
+        console.warn(`新闻音频生成失败:`, error)
+        // 返回空音频URL，但仍然保存新闻
+        return { news, audioUrl: '', script: individualScript }
+      }
     })
 
     const audioResults = await Promise.all(audioPromises)
 
     // 保存到数据库
     const savedNews = []
+    let successCount = 0
+    let failedCount = 0
 
     for (const { news, audioUrl, script } of audioResults) {
-      const saved = await prisma.news.create({
-        data: {
-          title: news.title,
-          content: news.content,
-          summary: news.summary,
-          translatedContent: news.translatedContent,
-          originalLink: news.link,
-          source: news.source,
-          category: news.category,
-          importance: news.importance || 3,
-          newsDate: today,
-          audioUrl,
-          script,
-        },
-      })
+      try {
+        const saved = await prisma.news.create({
+          data: {
+            title: news.title,
+            content: news.content,
+            summary: news.summary,
+            translatedContent: news.translatedContent,
+            originalLink: news.link,
+            source: news.source,
+            category: news.category,
+            importance: news.importance || 3,
+            newsDate: today,
+            audioUrl,
+            script,
+          },
+        })
 
-      savedNews.push(saved)
+        savedNews.push(saved)
+        if (audioUrl) {
+          successCount++
+        } else {
+          failedCount++
+        }
+      } catch (error) {
+        console.error(`保存新闻失败: ${news.title}`, error)
+        failedCount++
+      }
     }
 
     // 更新syncLog为成功，但保留script供步骤5使用
@@ -105,6 +132,8 @@ export async function POST(request: NextRequest) {
       step: 4,
       duration: `${duration}秒`,
       totalNews: savedNews.length,
+      audioSuccess: successCount,
+      audioFailed: failedCount,
       nextStep: '/api/sync/step5',
       completed: false, // 还有步骤5需要执行
     })
@@ -134,6 +163,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: '步骤4失败',
         step: 4,
+        details: error instanceof Error ? error.message : '未知错误',
       },
       { status: 500 }
     )

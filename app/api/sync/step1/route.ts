@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: '步骤1失败',
         step: 1,
+        details: error instanceof Error ? error.message : '未知错误',
       },
       { status: 500 }
     )
