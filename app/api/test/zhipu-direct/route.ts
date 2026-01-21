@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
         name: '生成播报脚本',
         success: !!content4,
         responseLength: content4?.length || 0,
-        response: content4?.substring(0, 500) + (content4?.length > 500 ? '...' : ''),
+        response: content4 ? (content4.substring(0, 500) + (content4.length > 500 ? '...' : '')) : '',
         rawResponse: JSON.stringify(response4, null, 2),
       })
     } catch (error: any) {
