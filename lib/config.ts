@@ -44,13 +44,13 @@ export interface SyncConfig {
 
 // AI配置
 export const aiConfig: AIConfig = {
-  requestDelay: 10000, // 10秒延迟
+  requestDelay: 5000, // 5秒延迟
   requestTimeout: 30000, // 30秒超时
-  batchSize: 4, // 批量处理4条
+  batchSize: 6, // 批量处理6条
   maxRetries: 3, // 最多重试3次
   retryDelayBase: 2000, // 初始2秒
   retryDelayMax: 16000, // 最大16秒
-  rateLimitRequestsPerMinute: 6, // 每分钟6个请求
+  rateLimitRequestsPerMinute: 12, // 每分钟12个请求
 }
 
 // 音频配置
