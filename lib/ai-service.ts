@@ -194,8 +194,8 @@ export class AIService {
   static async batchSummarizeNews(
     requests: NewsSummaryRequest[]
   ): Promise<AIServiceResponse<string[]>> {
-    // 使用并发控制，限制同时进行的请求数量为5个
-    const concurrency = 5
+    // 使用并发控制，限制同时进行的请求数量为3个（避免触发429错误）
+    const concurrency = 3
     const results: string[] = []
 
     // 分批处理
@@ -227,8 +227,8 @@ export class AIService {
   static async batchTranslate(
     requests: NewsTranslationRequest[]
   ): Promise<AIServiceResponse<string[]>> {
-    // 使用并发控制，限制同时进行的请求数量为5个
-    const concurrency = 5
+    // 使用并发控制，限制同时进行的请求数量为3个（避免触发429错误）
+    const concurrency = 3
     const results: string[] = []
 
     // 分批处理
