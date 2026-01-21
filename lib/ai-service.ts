@@ -4,7 +4,7 @@
  */
 
 export interface AIServiceConfig {
-  provider: 'openai' | 'deepseek' | 'local'
+  provider: 'openai' | 'deepseek' | 'local' | 'zhipu'
   apiKey?: string
   baseUrl?: string
   model?: string
@@ -103,6 +103,14 @@ export class AIServiceFactory {
         this.instance = new LocalModelAdapter({
           baseUrl: config?.baseUrl || process.env.LOCAL_MODEL_BASE_URL || 'http://localhost:11434',
           model: config?.model || process.env.LOCAL_MODEL_MODEL || 'llama2',
+        })
+        break
+
+      case 'zhipu':
+        const { ZhipuAdapter } = await import('./ai-providers/zhipu-adapter')
+        this.instance = new ZhipuAdapter({
+          apiKey: config?.apiKey || process.env.ZHIPU_API_KEY,
+          model: config?.model || process.env.ZHIPU_MODEL || 'glm-4.6',
         })
         break
 

@@ -70,8 +70,8 @@ ${request.content}
    * 获取播报脚本提示词
    */
   protected getPodcastScriptPrompt(request: PodcastScriptRequest): string {
-    const domesticNews = request.domesticNews.map(n => `- ${n.title}: ${n.summary || n.content}`).join('\n')
-    const internationalNews = request.internationalNews.map(n => `- ${n.title}: ${n.summary || n.content}`).join('\n')
+    const domesticNews = request.domesticNews.map(n => `- ${n.title}: ${n.summary}`).join('\n')
+    const internationalNews = request.internationalNews.map(n => `- ${n.title}: ${n.summary}`).join('\n')
 
     return `请生成一个轻松有趣的播客风格新闻播报脚本，包含以下内容：
 
