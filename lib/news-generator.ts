@@ -247,7 +247,15 @@ export class NewsGenerator {
     }))
 
     try {
-      const response = await AIService.batchSummarizeNews(requests)
+      // 添加超时控制，60秒超时
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('批量生成摘要超时')), 60000)
+      )
+
+      const response = await Promise.race([
+        AIService.batchSummarizeNews(requests),
+        timeoutPromise,
+      ]) as any
 
       if (response.success && response.data) {
         return newsItems.map((item, index) => ({
@@ -256,7 +264,8 @@ export class NewsGenerator {
         }))
       }
     } catch (error) {
-      console.error('批量生成摘要失败:', error)
+      console.error('批量生成摘要失败:', error instanceof Error ? error.message : error)
+      console.warn('将使用简化内容作为摘要')
     }
 
     // 失败时返回简化后的内容
@@ -281,7 +290,15 @@ export class NewsGenerator {
     }))
 
     try {
-      const response = await AIService.batchTranslate(requests)
+      // 添加超时控制，60秒超时
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('批量翻译超时')), 60000)
+      )
+
+      const response = await Promise.race([
+        AIService.batchTranslate(requests),
+        timeoutPromise,
+      ]) as any
 
       if (response.success && response.data) {
         const translations = new Map<number, string>()
@@ -300,7 +317,8 @@ export class NewsGenerator {
         })
       }
     } catch (error) {
-      console.error('批量翻译失败:', error)
+      console.error('批量翻译失败:', error instanceof Error ? error.message : error)
+      console.warn('将跳过翻译功能')
     }
 
     // 失败时返回原文
@@ -322,13 +340,22 @@ export class NewsGenerator {
 
     for (const item of newsItems) {
       try {
-        const response = await AIService.evaluateImportance(item.title, item.content)
+        // 添加超时控制，每个请求10秒超时
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('评估重要性超时')), 10000)
+        )
+
+        const response = await Promise.race([
+          AIService.evaluateImportance(item.title, item.content),
+          timeoutPromise,
+        ]) as any
+
         results.push({
           ...item,
-          importance: response.success && response.data ? response.data : 3,
+          importance: response?.success && response?.data ? response.data : 3,
         })
       } catch (error) {
-        console.error(`评估重要性失败: ${item.title}`, error)
+        console.error(`评估重要性失败: ${item.title}`, error instanceof Error ? error.message : error)
         results.push({ ...item, importance: 3 })
       }
     }

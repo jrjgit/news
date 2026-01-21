@@ -201,8 +201,13 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
   async healthCheck(): Promise<boolean> {
     try {
       if (!this.client) {
+        console.warn('智谱AI客户端未初始化')
         return false
       }
+
+      // 设置10秒超时
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
 
       const response = await this.client.chat.completions.create({
         model: this.model,
@@ -213,11 +218,29 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
           },
         ],
         max_tokens: 5,
+      }, {
+        signal: controller.signal,
       })
 
-      return !!response.choices[0]?.message?.content
+      clearTimeout(timeoutId)
+
+      const success = !!response.choices[0]?.message?.content
+      if (success) {
+        console.log('智谱AI健康检查通过')
+      } else {
+        console.warn('智谱AI健康检查失败：未收到有效响应')
+      }
+      return success
     } catch (error) {
-      console.error('智谱AI健康检查失败:', error)
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          console.warn('智谱AI健康检查超时')
+        } else {
+          console.warn(`智谱AI健康检查失败: ${error.message}`)
+        }
+      } else {
+        console.error('智谱AI健康检查失败:', error)
+      }
       return false
     }
   }

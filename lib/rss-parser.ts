@@ -38,14 +38,22 @@ export class RSSParser {
           'Sec-Fetch-Site': 'none',
           'Cache-Control': 'max-age=0',
         },
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(30000), // 减少超时时间到30秒
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        console.warn(`RSS源返回错误 ${response.status}: ${url}`)
+        return []
       }
 
       const xml = await response.text()
+
+      // 检查是否为空或无效XML
+      if (!xml || xml.trim().length < 100) {
+        console.warn(`RSS源内容为空或过短: ${url}`)
+        return []
+      }
+
       const feed = await this.parser.parseString(xml)
       const items: NewsItem[] = []
 
@@ -62,9 +70,23 @@ export class RSSParser {
         })
       }
 
+      if (items.length === 0) {
+        console.warn(`RSS源未获取到任何新闻: ${url}`)
+      }
+
       return items
     } catch (error) {
-      console.error(`解析RSS源失败: ${url}`, error)
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          console.warn(`RSS源请求超时: ${url}`)
+        } else if (error.message.includes('ENOTFOUND')) {
+          console.warn(`RSS源DNS解析失败: ${url}`)
+        } else {
+          console.warn(`解析RSS源失败: ${url} - ${error.message}`)
+        }
+      } else {
+        console.error(`解析RSS源失败: ${url}`, error)
+      }
       return []
     }
   }
