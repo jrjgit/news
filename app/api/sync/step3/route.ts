@@ -4,8 +4,8 @@ import { edgeTTS } from '@/lib/tts'
 import { prisma, Status } from '@/lib/db'
 
 /**
- * 步骤3：生成播报脚本和音频
- * 预计耗时：20-30秒
+ * 步骤3：生成播报脚本
+ * 预计耗时：10-15秒
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -43,14 +43,11 @@ export async function POST(request: NextRequest) {
     const internationalWithSummary = newsWithImportance.filter((n: NewsWithSummary) => n.category === 'INTERNATIONAL')
     const script = await newsGenerator.generateScript(domesticWithSummary, internationalWithSummary)
 
-    // 生成整体音频
-    const audioUrl = await edgeTTS.generateDailyNewsAudio(script, dateStr)
-
     // 更新syncLog
     await prisma.syncLog.update({
       where: { syncDate: todayDateOnly },
       data: {
-        errorMessage: JSON.stringify({ ...data, script, audioUrl }),
+        errorMessage: JSON.stringify({ ...data, script }),
       },
     })
 
@@ -58,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '步骤3完成：播报脚本和音频生成',
+      message: '步骤3完成：播报脚本生成',
       step: 3,
       duration: `${duration}秒`,
       nextStep: '/api/sync/step4',
@@ -66,12 +63,21 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('步骤3失败:', error)
 
-    // 更新syncLog为失败
+    // 获取当前数据以保留newsWithImportance
+    const currentLog = await prisma.syncLog.findUnique({
+      where: { syncDate: todayDateOnly },
+    })
+    const currentData = currentLog?.errorMessage ? JSON.parse(currentLog.errorMessage) : {}
+
+    // 更新syncLog为失败，但保留newsWithImportance
     await prisma.syncLog.update({
       where: { syncDate: todayDateOnly },
       data: {
         status: Status.FAILED,
-        errorMessage: error instanceof Error ? error.message : '未知错误',
+        errorMessage: JSON.stringify({
+          ...currentData,
+          error: error instanceof Error ? error.message : '未知错误',
+        }),
       },
     })
 

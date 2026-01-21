@@ -70,13 +70,13 @@ export async function POST(request: NextRequest) {
       savedNews.push(saved)
     }
 
-    // 更新syncLog为成功
+    // 更新syncLog为成功，但保留script供步骤5使用
     await prisma.syncLog.update({
       where: { syncDate: todayDateOnly },
       data: {
         status: Status.SUCCESS,
         newsCount: savedNews.length,
-        errorMessage: null,
+        errorMessage: JSON.stringify({ script }),
       },
     })
 
@@ -103,17 +103,27 @@ export async function POST(request: NextRequest) {
       step: 4,
       duration: `${duration}秒`,
       totalNews: savedNews.length,
-      completed: true,
+      nextStep: '/api/sync/step5',
+      completed: false, // 还有步骤5需要执行
     })
   } catch (error) {
     console.error('步骤4失败:', error)
 
-    // 更新syncLog为失败
+    // 获取当前数据以保留script
+    const currentLog = await prisma.syncLog.findUnique({
+      where: { syncDate: todayDateOnly },
+    })
+    const currentData = currentLog?.errorMessage ? JSON.parse(currentLog.errorMessage) : { script: '' }
+
+    // 更新syncLog为失败，但保留script
     await prisma.syncLog.update({
       where: { syncDate: todayDateOnly },
       data: {
         status: Status.FAILED,
-        errorMessage: error instanceof Error ? error.message : '未知错误',
+        errorMessage: JSON.stringify({
+          ...currentData,
+          error: error instanceof Error ? error.message : '未知错误',
+        }),
       },
     })
 
