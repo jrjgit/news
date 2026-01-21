@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
       // 使用新闻标题的哈希值作为文件名，避免重复
       const hash = Buffer.from(news.title).toString('base64').replace(/[+/=]/g, '').substring(0, 16)
 
-      // 添加30秒超时控制
+      // 添加60秒超时控制
       const timeoutPromise = new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('音频生成超时')), 30000)
+        setTimeout(() => reject(new Error('音频生成超时')), 60000)
       )
 
       try {

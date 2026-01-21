@@ -11,28 +11,32 @@ export class EdgeTTS {
   }
 
   async generateAudio(text: string, filename: string): Promise<string> {
+    const startTime = Date.now()
+    console.log(`开始生成音频: ${filename}, 文本长度: ${text.length}`)
+
     try {
       // 检查是否已存在音频文件
       if (this.useBlob) {
         const { blobs } = await list({ prefix: `audio/${filename}` })
         if (blobs.length > 0) {
-          console.log(`音频文件已存在于Blob: ${filename}`)
+          console.log(`音频文件已存在于Blob: ${filename}, 耗时: ${Date.now() - startTime}ms`)
           return blobs[0].url
         }
       }
 
       // 使用 edge-tts 生成音频
+      console.log(`开始调用TTS合成: ${filename}`)
       const audioBuffer = await this.synthesizeSpeech(text)
-
-      console.log(`音频生成成功: ${filename}`)
+      console.log(`TTS合成完成: ${filename}, 音频大小: ${audioBuffer.length} bytes, 耗时: ${Date.now() - startTime}ms`)
 
       // 在生产环境上传到Blob
       if (this.useBlob) {
+        console.log(`开始上传到Blob: ${filename}`)
         const blob = await put(`audio/${filename}`, audioBuffer, {
           access: 'public',
           contentType: 'audio/mpeg',
         })
-        console.log(`音频已上传到Blob: ${filename}`)
+        console.log(`音频已上传到Blob: ${filename}, 耗时: ${Date.now() - startTime}ms`)
         return blob.url
       }
 
@@ -43,9 +47,10 @@ export class EdgeTTS {
       await fs.mkdir(audioDir, { recursive: true })
       const localPath = path.join(audioDir, filename)
       await fs.writeFile(localPath, audioBuffer)
+      console.log(`音频已保存到本地: ${filename}, 耗时: ${Date.now() - startTime}ms`)
       return `/audio/${filename}`
     } catch (error) {
-      console.error('生成音频失败:', error)
+      console.error(`生成音频失败: ${filename}, 耗时: ${Date.now() - startTime}ms`, error)
       throw error
     }
   }
@@ -67,9 +72,32 @@ export class EdgeTTS {
     return await this.generateAudio(script, filename)
   }
 
-  async generateIndividualNewsAudio(text: string, newsId: string | number): Promise<string> {
+  async generateIndividualNewsAudio(text: string, newsId: number | string): Promise<string> {
     const filename = `news-${newsId}.mp3`
-    return await this.generateAudio(text, filename)
+
+    // 添加重试机制，最多重试2次
+    const maxRetries = 2
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`音频生成重试 ${attempt}/${maxRetries}: ${filename}`)
+        }
+        return await this.generateAudio(text, filename)
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+        console.warn(`音频生成失败 (尝试 ${attempt + 1}/${maxRetries + 1}):`, lastError.message)
+
+        // 如果不是最后一次尝试，等待2秒后重试
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      }
+    }
+
+    // 所有重试都失败，抛出最后的错误
+    throw lastError || new Error('音频生成失败')
   }
 
   async cleanupOldAudio(retentionDays: number = 3): Promise<void> {

@@ -189,30 +189,32 @@ export class AIService {
   }
 
   /**
-   * 批量处理新闻摘要（并行处理，带并发控制）
+   * 批量处理新闻摘要（串行处理，带延迟）
    */
   static async batchSummarizeNews(
     requests: NewsSummaryRequest[]
   ): Promise<AIServiceResponse<string[]>> {
-    // 使用并发控制，限制同时进行的请求数量为1个（避免触发429错误）
-    const concurrency = 1
+    // 串行处理，每次一个请求，避免触发429错误
     const results: string[] = []
 
-    // 分批处理
-    for (let i = 0; i < requests.length; i += concurrency) {
-      const batch = requests.slice(i, i + concurrency)
-      const promises = batch.map(async (request) => {
+    for (const request of requests) {
+      try {
         const response = await this.summarizeNews(request)
         if (response.success && response.data) {
-          return response.data
+          results.push(response.data)
         } else {
           // 如果失败，使用原文作为摘要
-          return request.content.substring(0, 200)
+          results.push(request.content.substring(0, 200))
         }
-      })
+      } catch (error) {
+        console.error('摘要生成失败:', error)
+        results.push(request.content.substring(0, 200))
+      }
 
-      const batchResults = await Promise.all(promises)
-      results.push(...batchResults)
+      // 每个请求之间延迟2秒，避免触发频率限制
+      if (results.length < requests.length) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
     }
 
     return {
@@ -222,40 +224,33 @@ export class AIService {
   }
 
   /**
-   * 批量翻译（并行处理，带并发控制）
+   * 批量翻译（串行处理，带延迟）
    */
   static async batchTranslate(
     requests: NewsTranslationRequest[]
   ): Promise<AIServiceResponse<string[]>> {
-    console.log(`AIService: 开始批量翻译，共 ${requests.length} 条`)
-
-    // 使用并发控制，限制同时进行的请求数量为1个（避免触发429错误）
-    const concurrency = 1
+    // 串行处理，每次一个请求，避免触发429错误
     const results: string[] = []
 
-    // 分批处理
-    for (let i = 0; i < requests.length; i += concurrency) {
-      const batchIndex = Math.floor(i / concurrency) + 1
-      const batch = requests.slice(i, i + concurrency)
-      console.log(`AIService: 处理第 ${batchIndex} 批翻译，共 ${batch.length} 条`)
-
-      const promises = batch.map(async (request, index) => {
+    for (const request of requests) {
+      try {
         const response = await this.translateContent(request)
         if (response.success && response.data) {
-          console.log(`AIService: 批次 ${batchIndex} 第 ${index + 1} 条翻译成功`)
-          return response.data
+          results.push(response.data)
         } else {
-          console.warn(`AIService: 批次 ${batchIndex} 第 ${index + 1} 条翻译失败，使用原文`)
           // 如果失败，使用原文
-          return request.content
+          results.push(request.content)
         }
-      })
+      } catch (error) {
+        console.error('翻译失败:', error)
+        results.push(request.content)
+      }
 
-      const batchResults = await Promise.all(promises)
-      results.push(...batchResults)
+      // 每个请求之间延迟2秒，避免触发频率限制
+      if (results.length < requests.length) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
     }
-
-    console.log(`AIService: 批量翻译完成，成功 ${results.length} 条`)
 
     return {
       success: true,

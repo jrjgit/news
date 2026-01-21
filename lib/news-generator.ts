@@ -233,8 +233,8 @@ export class NewsGenerator {
     simplified = simplified.replace(/；/g, '，')
     simplified = simplified.replace(/：/g, '，')
 
-    // 限制每条新闻的内容长度
-    const maxLength = 200
+    // 限制每条新闻的内容长度（减少到100字，加快音频生成速度）
+    const maxLength = 100
     if (simplified.length > maxLength) {
       // 尝试在句号处截断
       let truncated = simplified.substring(0, maxLength)
@@ -409,6 +409,11 @@ export class NewsGenerator {
       } catch (error) {
         console.error(`评估重要性失败: ${item.title}`, error instanceof Error ? error.message : error)
         results.push({ ...item, importance: 3 })
+      }
+
+      // 每个请求之间延迟2秒，避免触发频率限制
+      if (results.length < newsItems.length) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
       }
     }
 
