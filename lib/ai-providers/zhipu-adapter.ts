@@ -12,6 +12,13 @@ import {
   AIServiceResponse,
 } from '../ai-service'
 
+// 扩展OpenAI的类型以支持智谱AI的reasoning_content字段
+interface ZhipuChatCompletionMessage {
+  role: string
+  content?: string | null
+  reasoning_content?: string
+}
+
 export interface ZhipuAdapterConfig extends Record<string, unknown> {
   apiKey?: string
   model?: string
@@ -66,12 +73,16 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
           },
         ],
         temperature: 0.7,
-        max_tokens: 200, // 减少到200以加快生成速度
+        max_tokens: 500, // 增加到500以避免截断
       })
 
-      const summary = response.choices[0]?.message?.content?.trim()
+      // 智谱AI可能把内容放在reasoning_content字段
+      const message = response.choices[0]?.message as ZhipuChatCompletionMessage
+      const summary = (message?.content || message?.reasoning_content)?.trim()
 
       if (!summary) {
+        console.error('智谱AI: 未收到有效的摘要响应')
+        console.error('智谱AI: 响应详情', JSON.stringify(response, null, 2))
         throw new Error('未收到有效的摘要响应')
       }
 
@@ -104,10 +115,12 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
           },
         ],
         temperature: 0.3,
-        max_tokens: 500, // 减少到500以加快翻译速度
+        max_tokens: 1000, // 增加到1000以避免截断
       })
 
-      const translation = response.choices[0]?.message?.content?.trim()
+      // 智谱AI可能把内容放在reasoning_content字段
+      const message = response.choices[0]?.message as ZhipuChatCompletionMessage
+      const translation = (message?.content || message?.reasoning_content)?.trim()
 
       if (!translation) {
         console.error('智谱AI: 未收到有效的翻译响应')
@@ -147,12 +160,14 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
           },
         ],
         temperature: 0.8,
-        max_tokens: 1500,
+        max_tokens: 2000, // 增加到2000以避免截断
       })
 
       console.log(`智谱AI: 收到响应，choices=${response.choices?.length}`)
 
-      const script = response.choices[0]?.message?.content?.trim()
+      // 智谱AI可能把内容放在reasoning_content字段
+      const message = response.choices[0]?.message as ZhipuChatCompletionMessage
+      const script = (message?.content || message?.reasoning_content)?.trim()
 
       if (!script) {
         console.error('智谱AI: 未收到有效的脚本响应')
@@ -190,19 +205,29 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
           },
         ],
         temperature: 0.1,
-        max_tokens: 10,
+        max_tokens: 50, // 增加到50以避免截断
       })
 
-      const scoreText = response.choices[0]?.message?.content?.trim()
+      // 智谱AI可能把内容放在reasoning_content字段
+      const message = response.choices[0]?.message as ZhipuChatCompletionMessage
+      const scoreText = (message?.content || message?.reasoning_content)?.trim()
 
       if (!scoreText) {
+        console.error('智谱AI: 未收到有效的评分响应')
+        console.error('智谱AI: 响应详情', JSON.stringify(response, null, 2))
         throw new Error('未收到有效的评分响应')
       }
 
-      const score = parseInt(scoreText, 10)
+      // 从文本中提取数字
+      const scoreMatch = scoreText.match(/\d+/)
+      if (!scoreMatch) {
+        throw new Error(`无法从响应中提取评分: ${scoreText}`)
+      }
+
+      const score = parseInt(scoreMatch[0], 10)
 
       if (isNaN(score) || score < 1 || score > 5) {
-        throw new Error(`无效的评分: ${scoreText}`)
+        throw new Error(`无效的评分: ${score}`)
       }
 
       return {
@@ -239,7 +264,7 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
             content: '请回复"OK"',
           },
         ],
-        max_tokens: 10,
+        max_tokens: 50, // 增加到50以避免截断
       }, {
         signal: controller.signal,
       })
@@ -248,10 +273,11 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
 
       // 检查响应是否存在（即使content为空，只要有response对象就认为成功）
       const success = !!response.choices?.[0]?.message
-      const content = response.choices?.[0]?.message?.content
+      const message = response.choices?.[0]?.message as ZhipuChatCompletionMessage
+      const content = (message?.content || message?.reasoning_content) || '(空)'
 
       if (success) {
-        console.log(`智谱AI健康检查通过，响应内容: "${content || '(空)'}"`)
+        console.log(`智谱AI健康检查通过，响应内容: "${content}"`)
       } else {
         console.warn('智谱AI健康检查失败：未收到有效响应')
       }
