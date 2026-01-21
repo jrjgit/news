@@ -240,6 +240,8 @@ export class NewsGenerator {
       return newsItems.map(item => ({ ...item, summary: this.simplifyContent(item.content) }))
     }
 
+    console.log(`开始批量生成 ${newsItems.length} 条新闻摘要...`)
+
     const requests = newsItems.map(item => ({
       title: item.title,
       content: item.content,
@@ -247,15 +249,19 @@ export class NewsGenerator {
     }))
 
     try {
-      // 添加超时控制，60秒超时
+      // 添加超时控制，120秒超时（增加超时时间）
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('批量生成摘要超时')), 60000)
+        setTimeout(() => reject(new Error('批量生成摘要超时')), 120000)
       )
 
+      const startTime = Date.now()
       const response = await Promise.race([
         AIService.batchSummarizeNews(requests),
         timeoutPromise,
       ]) as any
+      const duration = Date.now() - startTime
+
+      console.log(`批量生成摘要完成，耗时 ${duration}ms`)
 
       if (response.success && response.data) {
         return newsItems.map((item, index) => ({
@@ -284,21 +290,27 @@ export class NewsGenerator {
       return newsItems.map(item => ({ ...item }))
     }
 
+    console.log(`开始批量翻译 ${internationalNews.length} 条国际新闻...`)
+
     const requests = internationalNews.map(item => ({
       content: item.content,
       targetLanguage: '中文',
     }))
 
     try {
-      // 添加超时控制，60秒超时
+      // 添加超时控制，120秒超时
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('批量翻译超时')), 60000)
+        setTimeout(() => reject(new Error('批量翻译超时')), 120000)
       )
 
+      const startTime = Date.now()
       const response = await Promise.race([
         AIService.batchTranslate(requests),
         timeoutPromise,
       ]) as any
+      const duration = Date.now() - startTime
+
+      console.log(`批量翻译完成，耗时 ${duration}ms`)
 
       if (response.success && response.data) {
         const translations = new Map<number, string>()
@@ -340,15 +352,17 @@ export class NewsGenerator {
 
     for (const item of newsItems) {
       try {
-        // 添加超时控制，每个请求10秒超时
+        // 添加超时控制，每个请求20秒超时（增加超时时间）
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('评估重要性超时')), 10000)
+          setTimeout(() => reject(new Error('评估重要性超时')), 20000)
         )
 
+        const startTime = Date.now()
         const response = await Promise.race([
           AIService.evaluateImportance(item.title, item.content),
           timeoutPromise,
         ]) as any
+        const duration = Date.now() - startTime
 
         results.push({
           ...item,

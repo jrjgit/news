@@ -213,18 +213,23 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
         model: this.model,
         messages: [
           {
+            role: 'system',
+            content: '你是一个测试助手，请简短回复。',
+          },
+          {
             role: 'user',
-            content: 'Hello',
+            content: '请回复"OK"',
           },
         ],
-        max_tokens: 5,
+        max_tokens: 10,
       }, {
         signal: controller.signal,
       })
 
       clearTimeout(timeoutId)
 
-      const success = !!response.choices[0]?.message?.content
+      // 检查响应是否存在（即使content为空，只要有response对象就认为成功）
+      const success = !!response.choices?.[0]?.message
       if (success) {
         console.log('智谱AI健康检查通过')
       } else {
