@@ -10,12 +10,15 @@ import { prisma, Status } from '@/lib/db'
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
+  const today = new Date()
+  const dateStr = today.toISOString().split('T')[0]
+  const todayDateOnly = new Date(dateStr)
+
   try {
-    const today = new Date()
 
     // 获取步骤3的数据
     const syncLog = await prisma.syncLog.findUnique({
-      where: { syncDate: today },
+      where: { syncDate: todayDateOnly },
     })
 
     if (!syncLog || syncLog.status !== Status.IN_PROGRESS) {
@@ -69,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     // 更新syncLog为成功
     await prisma.syncLog.update({
-      where: { syncDate: today },
+      where: { syncDate: todayDateOnly },
       data: {
         status: Status.SUCCESS,
         newsCount: savedNews.length,
@@ -107,7 +110,7 @@ export async function POST(request: NextRequest) {
 
     // 更新syncLog为失败
     await prisma.syncLog.update({
-      where: { syncDate: new Date() },
+      where: { syncDate: todayDateOnly },
       data: {
         status: Status.FAILED,
         errorMessage: error instanceof Error ? error.message : '未知错误',

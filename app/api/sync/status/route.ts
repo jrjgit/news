@@ -4,8 +4,11 @@ import { prisma } from '@/lib/db'
 export async function GET(request: NextRequest) {
   try {
     const today = new Date()
+    const dateStr = today.toISOString().split('T')[0]
+    const todayDateOnly = new Date(dateStr)
+
     const syncLog = await prisma.syncLog.findUnique({
-      where: { syncDate: today },
+      where: { syncDate: todayDateOnly },
     })
 
     if (!syncLog) {

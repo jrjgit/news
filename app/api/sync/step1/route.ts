@@ -10,13 +10,15 @@ import { prisma, Status } from '@/lib/db'
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
+  const today = new Date()
+  const dateStr = today.toISOString().split('T')[0]
+  const todayDateOnly = new Date(dateStr)
+
   try {
-    const today = new Date()
-    const dateStr = today.toISOString().split('T')[0]
 
     // 检查今日是否已同步
     const existingLog = await prisma.syncLog.findUnique({
-      where: { syncDate: today },
+      where: { syncDate: todayDateOnly },
     })
 
     if (existingLog) {
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
       // 如果是失败或进行中状态，允许重新执行
       // 删除旧的记录，重新开始
       await prisma.syncLog.delete({
-        where: { syncDate: today },
+        where: { syncDate: todayDateOnly },
       })
     }
 
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest) {
     // 保存到临时存储（使用syncLog）
     await prisma.syncLog.create({
       data: {
-        syncDate: today,
+        syncDate: todayDateOnly,
         status: Status.IN_PROGRESS,
         newsCount: newsWithSummaries.length,
         errorMessage: JSON.stringify({ domestic, international, newsWithSummaries }),
@@ -66,6 +68,16 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('步骤1失败:', error)
+
+    // 更新syncLog为失败
+    await prisma.syncLog.update({
+      where: { syncDate: todayDateOnly },
+      data: {
+        status: Status.FAILED,
+        errorMessage: error instanceof Error ? error.message : '未知错误',
+      },
+    })
+
     return NextResponse.json(
       {
         success: false,
