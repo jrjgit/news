@@ -67,7 +67,7 @@ export class EdgeTTS {
     return await this.generateAudio(script, filename)
   }
 
-  async generateIndividualNewsAudio(text: string, newsId: number): Promise<string> {
+  async generateIndividualNewsAudio(text: string, newsId: string | number): Promise<string> {
     const filename = `news-${newsId}.mp3`
     return await this.generateAudio(text, filename)
   }
