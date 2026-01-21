@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { newsGenerator } from '@/lib/news-generator'
+import { newsGenerator, NewsWithSummary } from '@/lib/news-generator'
 import { edgeTTS } from '@/lib/tts'
 import { prisma } from '@/lib/db'
 
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 生成播报脚本
-    const domesticWithSummary = newsWithImportance.filter(n => n.category === 'DOMESTIC')
-    const internationalWithSummary = newsWithImportance.filter(n => n.category === 'INTERNATIONAL')
+    const domesticWithSummary = newsWithImportance.filter((n: NewsWithSummary) => n.category === 'DOMESTIC')
+    const internationalWithSummary = newsWithImportance.filter((n: NewsWithSummary) => n.category === 'INTERNATIONAL')
     const script = await newsGenerator.generateScript(domesticWithSummary, internationalWithSummary)
 
     // 生成整体音频
