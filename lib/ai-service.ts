@@ -189,21 +189,30 @@ export class AIService {
   }
 
   /**
-   * 批量处理新闻摘要
+   * 批量处理新闻摘要（并行处理，带并发控制）
    */
   static async batchSummarizeNews(
     requests: NewsSummaryRequest[]
   ): Promise<AIServiceResponse<string[]>> {
+    // 使用并发控制，限制同时进行的请求数量为5个
+    const concurrency = 5
     const results: string[] = []
 
-    for (const request of requests) {
-      const response = await this.summarizeNews(request)
-      if (response.success && response.data) {
-        results.push(response.data)
-      } else {
-        // 如果失败，使用原文作为摘要
-        results.push(request.content.substring(0, 200))
-      }
+    // 分批处理
+    for (let i = 0; i < requests.length; i += concurrency) {
+      const batch = requests.slice(i, i + concurrency)
+      const promises = batch.map(async (request) => {
+        const response = await this.summarizeNews(request)
+        if (response.success && response.data) {
+          return response.data
+        } else {
+          // 如果失败，使用原文作为摘要
+          return request.content.substring(0, 200)
+        }
+      })
+
+      const batchResults = await Promise.all(promises)
+      results.push(...batchResults)
     }
 
     return {
@@ -213,21 +222,30 @@ export class AIService {
   }
 
   /**
-   * 批量翻译
+   * 批量翻译（并行处理，带并发控制）
    */
   static async batchTranslate(
     requests: NewsTranslationRequest[]
   ): Promise<AIServiceResponse<string[]>> {
+    // 使用并发控制，限制同时进行的请求数量为5个
+    const concurrency = 5
     const results: string[] = []
 
-    for (const request of requests) {
-      const response = await this.translateContent(request)
-      if (response.success && response.data) {
-        results.push(response.data)
-      } else {
-        // 如果失败，使用原文
-        results.push(request.content)
-      }
+    // 分批处理
+    for (let i = 0; i < requests.length; i += concurrency) {
+      const batch = requests.slice(i, i + concurrency)
+      const promises = batch.map(async (request) => {
+        const response = await this.translateContent(request)
+        if (response.success && response.data) {
+          return response.data
+        } else {
+          // 如果失败，使用原文
+          return request.content
+        }
+      })
+
+      const batchResults = await Promise.all(promises)
+      results.push(...batchResults)
     }
 
     return {
