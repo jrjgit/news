@@ -89,6 +89,8 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
       const client = this.ensureClient()
       const prompt = this.getTranslationPrompt(request)
 
+      console.log(`智谱AI: 开始翻译，目标语言=${request.targetLanguage}，内容长度=${request.content.length}`)
+
       const response = await client.chat.completions.create({
         model: this.model,
         messages: [
@@ -108,14 +110,19 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
       const translation = response.choices[0]?.message?.content?.trim()
 
       if (!translation) {
+        console.error('智谱AI: 未收到有效的翻译响应')
+        console.error('智谱AI: 响应详情', JSON.stringify(response, null, 2))
         throw new Error('未收到有效的翻译响应')
       }
+
+      console.log(`智谱AI: 翻译成功，原文长度=${request.content.length}，译文长度=${translation.length}`)
 
       return {
         success: true,
         data: translation,
       }
     } catch (error: unknown) {
+      console.error('智谱AI: 翻译失败', error)
       return this.handleError(error, '内容翻译')
     }
   }
@@ -124,6 +131,8 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
     try {
       const client = this.ensureClient()
       const prompt = this.getPodcastScriptPrompt(request)
+
+      console.log(`智谱AI: 开始生成播报脚本，model=${this.model}`)
 
       const response = await client.chat.completions.create({
         model: this.model,
@@ -141,17 +150,24 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
         max_tokens: 1500,
       })
 
+      console.log(`智谱AI: 收到响应，choices=${response.choices?.length}`)
+
       const script = response.choices[0]?.message?.content?.trim()
 
       if (!script) {
+        console.error('智谱AI: 未收到有效的脚本响应')
+        console.error('智谱AI: 响应详情', JSON.stringify(response, null, 2))
         throw new Error('未收到有效的脚本响应')
       }
+
+      console.log(`智谱AI: 脚本生成成功，长度=${script.length} 字符`)
 
       return {
         success: true,
         data: script,
       }
     } catch (error: unknown) {
+      console.error('智谱AI: 生成播报脚本失败', error)
       return this.handleError(error, '播报脚本生成')
     }
   }
@@ -205,6 +221,8 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
         return false
       }
 
+      console.log(`智谱AI: 开始健康检查，model=${this.model}`)
+
       // 设置10秒超时
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 10000)
@@ -230,8 +248,10 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
 
       // 检查响应是否存在（即使content为空，只要有response对象就认为成功）
       const success = !!response.choices?.[0]?.message
+      const content = response.choices?.[0]?.message?.content
+
       if (success) {
-        console.log('智谱AI健康检查通过')
+        console.log(`智谱AI健康检查通过，响应内容: "${content || '(空)'}"`)
       } else {
         console.warn('智谱AI健康检查失败：未收到有效响应')
       }

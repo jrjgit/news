@@ -227,18 +227,25 @@ export class AIService {
   static async batchTranslate(
     requests: NewsTranslationRequest[]
   ): Promise<AIServiceResponse<string[]>> {
+    console.log(`AIService: 开始批量翻译，共 ${requests.length} 条`)
+
     // 使用并发控制，限制同时进行的请求数量为3个（避免触发429错误）
     const concurrency = 3
     const results: string[] = []
 
     // 分批处理
     for (let i = 0; i < requests.length; i += concurrency) {
+      const batchIndex = Math.floor(i / concurrency) + 1
       const batch = requests.slice(i, i + concurrency)
-      const promises = batch.map(async (request) => {
+      console.log(`AIService: 处理第 ${batchIndex} 批翻译，共 ${batch.length} 条`)
+
+      const promises = batch.map(async (request, index) => {
         const response = await this.translateContent(request)
         if (response.success && response.data) {
+          console.log(`AIService: 批次 ${batchIndex} 第 ${index + 1} 条翻译成功`)
           return response.data
         } else {
+          console.warn(`AIService: 批次 ${batchIndex} 第 ${index + 1} 条翻译失败，使用原文`)
           // 如果失败，使用原文
           return request.content
         }
@@ -247,6 +254,8 @@ export class AIService {
       const batchResults = await Promise.all(promises)
       results.push(...batchResults)
     }
+
+    console.log(`AIService: 批量翻译完成，成功 ${results.length} 条`)
 
     return {
       success: true,

@@ -56,6 +56,8 @@ export class NewsGenerator {
     domesticNews: NewsItem[],
     internationalNews: NewsItem[]
   ): Promise<string> {
+    console.log('开始使用AI生成播报脚本...')
+
     // 准备新闻数据（使用摘要或内容）
     const domesticNewsData = domesticNews.map(news => ({
       title: news.title,
@@ -73,13 +75,27 @@ export class NewsGenerator {
       style: 'casual', // 轻松播客风格
     }
 
-    const response = await AIService.generatePodcastScript(request)
+    console.log(`准备发送AI请求：国内新闻${domesticNewsData.length}条，国际新闻${internationalNewsData.length}条`)
 
-    if (!response.success || !response.data) {
-      throw new Error(response.error || 'AI生成脚本失败')
+    try {
+      const response = await AIService.generatePodcastScript(request)
+
+      if (!response.success) {
+        console.error('AI生成脚本失败:', response.error)
+        throw new Error(response.error || 'AI生成脚本失败')
+      }
+
+      if (!response.data || response.data.trim().length === 0) {
+        console.error('AI返回了空内容')
+        throw new Error('AI返回了空内容')
+      }
+
+      console.log(`AI生成脚本成功，长度: ${response.data.length} 字符`)
+      return response.data
+    } catch (error) {
+      console.error('AI生成脚本异常:', error)
+      throw error
     }
-
-    return response.data
   }
 
   /**
@@ -303,6 +319,7 @@ export class NewsGenerator {
     }
 
     console.log(`开始批量翻译 ${internationalNews.length} 条国际新闻...`)
+    console.log('国际新闻列表:', internationalNews.map(n => ({ title: n.title.substring(0, 50), link: n.link })))
 
     const requests = internationalNews.map(item => ({
       content: item.content,
@@ -325,16 +342,24 @@ export class NewsGenerator {
       console.log(`批量翻译完成，耗时 ${duration}ms`)
 
       if (response.success && response.data) {
+        // 创建一个Map来存储国际新闻的索引和对应的翻译结果
         const translations = new Map<number, string>()
         internationalNews.forEach((item, index) => {
-          translations.set(item.title.length, response.data![index])
+          // 使用索引作为key，因为它是唯一的
+          translations.set(index, response.data![index])
+          console.log(`翻译 ${index + 1}/${internationalNews.length}: ${item.title.substring(0, 50)}...`)
         })
 
-        return newsItems.map(item => {
+        return newsItems.map((item, itemIndex) => {
           if (item.category === 'INTERNATIONAL') {
-            return {
-              ...item,
-              translatedContent: translations.get(item.title.length) || item.content,
+            // 找到这条新闻在国际新闻数组中的索引
+            const internationalIndex = internationalNews.findIndex(n => n.title === item.title && n.link === item.link)
+            if (internationalIndex !== -1) {
+              const translated = translations.get(internationalIndex)
+              return {
+                ...item,
+                translatedContent: translated || item.content,
+              }
             }
           }
           return { ...item }

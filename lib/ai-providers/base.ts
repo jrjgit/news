@@ -114,7 +114,16 @@ ${internationalNews}
    * 统一的错误处理
    */
   protected handleError(error: unknown, operation: string): AIServiceResponse<never> {
-    const errorMessage = error instanceof Error ? error.message : `${operation}失败`
+    let errorMessage = `${operation}失败`
+
+    if (error instanceof Error) {
+      errorMessage = error.message
+      console.error(`${operation}错误:`, error.message)
+      console.error(`${operation}堆栈:`, error.stack)
+    } else {
+      console.error(`${operation}未知错误:`, error)
+    }
+
     return {
       success: false,
       error: errorMessage,

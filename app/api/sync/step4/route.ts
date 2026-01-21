@@ -39,9 +39,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 生成单条新闻音频
-    const audioPromises = newsWithImportance.map(async (news: NewsWithSummary, index: number) => {
+    const audioPromises = newsWithImportance.map(async (news: NewsWithSummary) => {
       const individualScript = newsGenerator.generateIndividualScript(news)
-      const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, index + 1)
+      // 使用新闻标题的哈希值作为文件名，避免重复
+      const hash = Buffer.from(news.title).toString('base64').replace(/[+/=]/g, '').substring(0, 16)
+      const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, hash)
       return { news, audioUrl: newsAudioUrl, script: individualScript }
     })
 
