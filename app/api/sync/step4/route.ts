@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 生成单条新闻音频
-    const audioPromises = newsWithImportance.map(async (news, index) => {
+    const audioPromises = newsWithImportance.map(async (news: any, index: number) => {
       const individualScript = newsGenerator.generateIndividualScript(news)
       const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, index + 1)
       return { news, audioUrl: newsAudioUrl, script: individualScript }
