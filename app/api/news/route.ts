@@ -49,20 +49,20 @@ export async function GET(request: NextRequest) {
     }
 
     // 构建排序条件
-    const orderBy: Record<string, 'asc' | 'desc'> = {}
+    const orderBy: Array<{ [key: string]: 'asc' | 'desc' }> = []
     const validSortFields = ['importance', 'createdAt', 'newsDate']
     const validOrder = ['asc', 'desc']
 
     if (validSortFields.includes(sortBy) && validOrder.includes(order)) {
-      orderBy[sortBy] = order as 'asc' | 'desc'
+      orderBy.push({ [sortBy]: order as 'asc' | 'desc' })
     } else {
       // 默认排序
-      orderBy.createdAt = 'desc'
+      orderBy.push({ createdAt: 'desc' })
     }
 
     // 如果按重要性排序，重要性相同时按创建时间排序
     if (sortBy === 'importance') {
-      orderBy.createdAt = 'desc'
+      orderBy.push({ createdAt: 'desc' })
     }
 
     // 查询新闻
