@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
         translatedContentLength: n.translatedContent?.length || 0,
         hasTranslation: !!n.translatedContent,
         isTranslated: n.translatedContent !== n.content,
-        translatedContent: n.translatedContent?.substring(0, 100) + (n.translatedContent?.length > 100 ? '...' : ''),
-        originalContent: n.content?.substring(0, 100) + (n.content?.length > 100 ? '...' : ''),
+        translatedContent: n.translatedContent ? (n.translatedContent.substring(0, 100) + (n.translatedContent.length > 100 ? '...' : '')) : '',
+        originalContent: n.content ? (n.content.substring(0, 100) + (n.content.length > 100 ? '...' : '')) : '',
       })),
     })
   } catch (error) {
