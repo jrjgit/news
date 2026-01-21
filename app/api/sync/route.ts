@@ -2,20 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { syncNews } from '@/cron/sync-news'
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+
   try {
-    // 等待同步任务完成
     await syncNews()
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2)
 
     return NextResponse.json({
       success: true,
-      message: '同步任务完成',
+      message: '新闻同步成功',
+      duration: `${duration}秒`,
     })
   } catch (error) {
-    console.error('同步任务失败:', error)
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2)
+
+    console.error('同步失败:', error)
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : '同步任务失败',
+        error: '同步失败',
+        duration: `${duration}秒`,
       },
       { status: 500 }
     )

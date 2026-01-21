@@ -26,7 +26,7 @@ interface News {
 export default function Home() {
   const [news, setNews] = useState<News[]>([])
   const [loading, setLoading] = useState(true)
-  const [isSyncing, setIsSyncing] = useState(false)
+
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
 
   // 搜索和筛选状态
@@ -90,30 +90,6 @@ export default function Home() {
     }
   }
 
-  const handleSync = async () => {
-    try {
-      setIsSyncing(true)
-      const response = await fetch('/api/sync', {
-        method: 'POST',
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        // 等待几秒后刷新新闻
-        setTimeout(() => {
-          fetchNews()
-        }, 5000)
-      } else {
-        console.error('同步失败:', data.error)
-      }
-    } catch (error) {
-      console.error('同步失败:', error)
-    } finally {
-      setIsSyncing(false)
-    }
-  }
-
   // 过滤和搜索新闻
   const filteredNews = news.filter((item) => {
     // 搜索过滤
@@ -139,7 +115,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
-      <Header onSync={handleSync} isSyncing={isSyncing} />
+      <Header onFetchNews={fetchNews} />
 
       <main className="container mx-auto px-4 py-8">
         {/* 控制面板 */}
