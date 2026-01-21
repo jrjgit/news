@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { newsGenerator } from '@/lib/news-generator'
 import { prisma, Status } from '@/lib/db'
+import { syncConfig, sleep } from '@/lib/config'
 
 /**
  * 步骤2：翻译和评估重要性
@@ -36,6 +37,10 @@ export async function POST(request: NextRequest) {
         error: '未找到步骤1的数据',
       })
     }
+
+    // 步骤间延迟，给智谱AI时间恢复配额
+    console.log(`步骤2：等待 ${syncConfig.stepDelay / 1000} 秒后开始处理`)
+    await sleep(syncConfig.stepDelay)
 
     // 翻译国际新闻
     const newsWithTranslations = await newsGenerator.batchTranslateInternationalNews(newsWithSummaries)

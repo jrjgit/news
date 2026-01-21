@@ -3,6 +3,9 @@
  * 提供统一的AI调用接口，支持多种AI提供商
  */
 
+import { aiConfig, sleep, getExponentialBackoffDelay } from './config'
+import { waitForRateLimit } from './rate-limiter'
+
 export interface AIServiceConfig {
   provider: 'openai' | 'deepseek' | 'local' | 'zhipu'
   apiKey?: string
@@ -189,16 +192,23 @@ export class AIService {
   }
 
   /**
-   * 批量处理新闻摘要（串行处理，带延迟）
+   * 批量处理新闻摘要（串行处理，带延迟和速率限制）
    */
   static async batchSummarizeNews(
     requests: NewsSummaryRequest[]
   ): Promise<AIServiceResponse<string[]>> {
+    // 限制批量数量
+    const limitedRequests = requests.slice(0, aiConfig.batchSize)
+    console.log(`批量摘要：处理 ${limitedRequests.length}/${requests.length} 条新闻`)
+
     // 串行处理，每次一个请求，避免触发429错误
     const results: string[] = []
 
-    for (const request of requests) {
+    for (const request of limitedRequests) {
       try {
+        // 等待速率限制器
+        await waitForRateLimit()
+
         const response = await this.summarizeNews(request)
         if (response.success && response.data) {
           results.push(response.data)
@@ -211,9 +221,9 @@ export class AIService {
         results.push(request.content.substring(0, 200))
       }
 
-      // 每个请求之间延迟2秒，避免触发频率限制
-      if (results.length < requests.length) {
-        await new Promise(resolve => setTimeout(resolve, 2000))
+      // 每个请求之间延迟，避免触发频率限制
+      if (results.length < limitedRequests.length) {
+        await sleep(aiConfig.requestDelay)
       }
     }
 
@@ -224,16 +234,23 @@ export class AIService {
   }
 
   /**
-   * 批量翻译（串行处理，带延迟）
+   * 批量翻译（串行处理，带延迟和速率限制）
    */
   static async batchTranslate(
     requests: NewsTranslationRequest[]
   ): Promise<AIServiceResponse<string[]>> {
+    // 限制批量数量
+    const limitedRequests = requests.slice(0, aiConfig.batchSize)
+    console.log(`批量翻译：处理 ${limitedRequests.length}/${requests.length} 条新闻`)
+
     // 串行处理，每次一个请求，避免触发429错误
     const results: string[] = []
 
-    for (const request of requests) {
+    for (const request of limitedRequests) {
       try {
+        // 等待速率限制器
+        await waitForRateLimit()
+
         const response = await this.translateContent(request)
         if (response.success && response.data) {
           results.push(response.data)
@@ -246,9 +263,9 @@ export class AIService {
         results.push(request.content)
       }
 
-      // 每个请求之间延迟2秒，避免触发频率限制
-      if (results.length < requests.length) {
-        await new Promise(resolve => setTimeout(resolve, 2000))
+      // 每个请求之间延迟，避免触发频率限制
+      if (results.length < limitedRequests.length) {
+        await sleep(aiConfig.requestDelay)
       }
     }
 

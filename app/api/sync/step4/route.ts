@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { newsGenerator, NewsWithSummary } from '@/lib/news-generator'
 import { edgeTTS } from '@/lib/tts'
 import { prisma, Status } from '@/lib/db'
+import { audioConfig, sleep } from '@/lib/config'
 
 /**
  * 步骤4：保存到数据库
@@ -38,31 +39,45 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 生成单条新闻音频（带超时控制）
-    const audioPromises = newsWithImportance.map(async (news: NewsWithSummary) => {
+    // 生成单条新闻音频（串行处理，带超时控制）
+    const audioResults = []
+
+    for (let index = 0; index < newsWithImportance.length; index++) {
+      const news = newsWithImportance[index]
       const individualScript = newsGenerator.generateIndividualScript(news)
+      
+      // 检查文本长度，如果超过限制则截断
+      let scriptToUse = individualScript
+      if (individualScript.length > audioConfig.maxTextLength) {
+        console.warn(`新闻 ${index + 1} 文本过长 (${individualScript.length}字)，截断到 ${audioConfig.maxTextLength} 字`)
+        scriptToUse = individualScript.substring(0, audioConfig.maxTextLength)
+      }
+
       // 使用新闻标题的哈希值作为文件名，避免重复
       const hash = Buffer.from(news.title).toString('base64').replace(/[+/=]/g, '').substring(0, 16)
 
-      // 添加60秒超时控制
+      // 添加超时控制
       const timeoutPromise = new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('音频生成超时')), 60000)
+        setTimeout(() => reject(new Error('音频生成超时')), audioConfig.generationTimeout)
       )
 
       try {
         const newsAudioUrl = await Promise.race([
-          edgeTTS.generateIndividualNewsAudio(individualScript, hash),
+          edgeTTS.generateIndividualNewsAudio(scriptToUse, hash),
           timeoutPromise,
         ]) as string
-        return { news, audioUrl: newsAudioUrl, script: individualScript }
+        audioResults.push({ news, audioUrl: newsAudioUrl, script: scriptToUse })
+        console.log(`新闻 ${index + 1}/${newsWithImportance.length} 音频生成成功`)
       } catch (error) {
-        console.warn(`新闻音频生成失败:`, error)
-        // 返回空音频URL，但仍然保存新闻
-        return { news, audioUrl: '', script: individualScript }
+        console.warn(`新闻 ${index + 1} 音频生成失败:`, error)
+        audioResults.push({ news, audioUrl: '', script: scriptToUse })
       }
-    })
 
-    const audioResults = await Promise.all(audioPromises)
+      // 每个音频之间延迟，避免TTS服务负载过高
+      if (index < newsWithImportance.length - 1) {
+        await sleep(audioConfig.generationDelay)
+      }
+    }
 
     // 保存到数据库
     const savedNews = []

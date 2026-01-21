@@ -11,25 +11,26 @@ import {
   PodcastScriptRequest,
   AIServiceResponse,
 } from '../ai-service'
+import { aiConfig, getExponentialBackoffDelay, sleep } from '../config'
 
 // 扩展OpenAI的类型以支持智谱AI的reasoning_content字段
-interface ZhipuChatCompletionMessage {
+interface ZhipiChatCompletionMessage {
   role: string
   content?: string | null
   reasoning_content?: string
 }
 
-export interface ZhipuAdapterConfig extends Record<string, unknown> {
+export interface ZhipiAdapterConfig extends Record<string, unknown> {
   apiKey?: string
   model?: string
   baseUrl?: string
 }
 
-export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
+export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
   private client: OpenAI | null = null
   private model: string
 
-  constructor(config: ZhipuAdapterConfig) {
+  constructor(config: ZhipiAdapterConfig) {
     super(config)
     this.model = config.model || 'glm-4.6'
 
@@ -55,29 +56,85 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
     return this.client
   }
 
+  /**
+   * 执行API请求（带重试机制和超时控制）
+   */
+  private async executeRequest<T>(
+    requestFn: () => Promise<T>,
+    operationName: string
+  ): Promise<T> {
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt <= aiConfig.maxRetries; attempt++) {
+      try {
+        // 添加超时控制
+        const timeoutPromise = new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(`${operationName}超时`)), aiConfig.requestTimeout)
+        )
+
+        const result = await Promise.race([requestFn(), timeoutPromise]) as T
+        return result
+      } catch (error: unknown) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+        
+        // 检查是否是429错误（速率限制）
+        const isRateLimitError = this.isRateLimitError(error)
+
+        if (isRateLimitError && attempt < aiConfig.maxRetries) {
+          const backoffDelay = getExponentialBackoffDelay(attempt)
+          console.warn(`${operationName}遇到速率限制，${backoffDelay / 1000}秒后重试 (尝试 ${attempt + 1}/${aiConfig.maxRetries + 1})`)
+          await sleep(backoffDelay)
+          continue
+        }
+
+        // 如果不是速率限制错误或已达到最大重试次数，直接抛出错误
+        if (attempt === aiConfig.maxRetries) {
+          console.error(`${operationName}失败:`, lastError.message)
+          throw lastError
+        }
+
+        // 其他错误也重试
+        console.warn(`${operationName}失败，${aiConfig.retryDelayBase / 1000}秒后重试 (尝试 ${attempt + 1}/${aiConfig.maxRetries + 1})`)
+        await sleep(aiConfig.retryDelayBase)
+      }
+    }
+
+    throw lastError || new Error(`${operationName}失败`)
+  }
+
+  /**
+   * 检查是否是速率限制错误
+   */
+  private isRateLimitError(error: unknown): boolean {
+    const err = error as any
+    return err?.status === 429 || err?.code === '1302' || err?.message?.includes('429') || err?.message?.includes('并发数过高')
+  }
+
   async summarizeNews(request: NewsSummaryRequest): Promise<AIServiceResponse<string>> {
     try {
       const client = this.ensureClient()
       const prompt = this.getSummaryPrompt(request)
 
-      const response = await client.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个专业的新闻编辑，擅长提炼新闻摘要。',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 500, // 增加到500以避免截断
-      })
+      const response = await this.executeRequest(
+        () => client.chat.completions.create({
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个专业的新闻编辑，擅长提炼新闻摘要。',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 500,
+        }),
+        '新闻摘要'
+      )
 
-      // 智谱AI可能把内容放在reasoning_content字段
-      const message = response.choices[0]?.message as ZhipuChatCompletionMessage
+      const message = response.choices[0]?.message as ZhipiChatCompletionMessage
       const summary = (message?.content || message?.reasoning_content)?.trim()
 
       if (!summary) {
@@ -102,24 +159,26 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
 
       console.log(`智谱AI: 开始翻译，目标语言=${request.targetLanguage}，内容长度=${request.content.length}`)
 
-      const response = await client.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个专业的翻译，擅长新闻翻译，特别是中英互译。',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 1000, // 增加到1000以避免截断
-      })
+      const response = await this.executeRequest(
+        () => client.chat.completions.create({
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个专业的翻译，擅长新闻翻译，特别是中英互译。',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.3,
+          max_tokens: 1000,
+        }),
+        '内容翻译'
+      )
 
-      // 智谱AI可能把内容放在reasoning_content字段
-      const message = response.choices[0]?.message as ZhipuChatCompletionMessage
+      const message = response.choices[0]?.message as ZhipiChatCompletionMessage
       const translation = (message?.content || message?.reasoning_content)?.trim()
 
       if (!translation) {
@@ -147,26 +206,28 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
 
       console.log(`智谱AI: 开始生成播报脚本，model=${this.model}`)
 
-      const response = await client.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个专业的播客主持人，擅长用轻松有趣的方式播报新闻。',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.8,
-        max_tokens: 2000, // 增加到2000以避免截断
-      })
+      const response = await this.executeRequest(
+        () => client.chat.completions.create({
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个专业的播客主持人，擅长用轻松有趣的方式播报新闻。',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.8,
+          max_tokens: 2000,
+        }),
+        '播报脚本生成'
+      )
 
       console.log(`智谱AI: 收到响应，choices=${response.choices?.length}`)
 
-      // 智谱AI可能把内容放在reasoning_content字段
-      const message = response.choices[0]?.message as ZhipuChatCompletionMessage
+      const message = response.choices[0]?.message as ZhipiChatCompletionMessage
       const script = (message?.content || message?.reasoning_content)?.trim()
 
       if (!script) {
@@ -192,24 +253,26 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
       const client = this.ensureClient()
       const prompt = this.getImportancePrompt(title, content)
 
-      const response = await client.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个新闻编辑，擅长评估新闻重要性。',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: 50, // 增加到50以避免截断
-      })
+      const response = await this.executeRequest(
+        () => client.chat.completions.create({
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个新闻编辑，擅长评估新闻重要性。',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 50,
+        }),
+        '重要性评估'
+      )
 
-      // 智谱AI可能把内容放在reasoning_content字段
-      const message = response.choices[0]?.message as ZhipuChatCompletionMessage
+      const message = response.choices[0]?.message as ZhipiChatCompletionMessage
       const scoreText = (message?.content || message?.reasoning_content)?.trim()
 
       if (!scoreText) {
@@ -264,16 +327,15 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
             content: '请回复"OK"',
           },
         ],
-        max_tokens: 50, // 增加到50以避免截断
+        max_tokens: 50,
       }, {
         signal: controller.signal,
       })
 
       clearTimeout(timeoutId)
 
-      // 检查响应是否存在（即使content为空，只要有response对象就认为成功）
       const success = !!response.choices?.[0]?.message
-      const message = response.choices?.[0]?.message as ZhipuChatCompletionMessage
+      const message = response.choices?.[0]?.message as ZhipiChatCompletionMessage
       const content = (message?.content || message?.reasoning_content) || '(空)'
 
       if (success) {
