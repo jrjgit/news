@@ -66,7 +66,7 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
           },
         ],
         temperature: 0.7,
-        max_tokens: 300,
+        max_tokens: 200, // 减少到200以加快生成速度
       })
 
       const summary = response.choices[0]?.message?.content?.trim()
@@ -102,7 +102,7 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipuAdapterConfig> {
           },
         ],
         temperature: 0.3,
-        max_tokens: 1000,
+        max_tokens: 500, // 减少到500以加快翻译速度
       })
 
       const translation = response.choices[0]?.message?.content?.trim()
