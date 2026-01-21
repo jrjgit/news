@@ -204,9 +204,9 @@ export class RSSParser {
   }
 
   selectDailyNews(newsItems: NewsItem[]): { domestic: NewsItem[]; international: NewsItem[] } {
-    // 从环境变量读取配置，默认为15条国内+10条国际
-    const domesticCount = parseInt(process.env.NEWS_COUNT_DOMESTIC || '15', 10)
-    const internationalCount = parseInt(process.env.NEWS_COUNT_INTERNATIONAL || '10', 10)
+    // 从环境变量读取配置，默认为8条国内+5条国际（减少数量以适应Vercel 120秒超时限制）
+    const domesticCount = parseInt(process.env.NEWS_COUNT_DOMESTIC || '8', 10)
+    const internationalCount = parseInt(process.env.NEWS_COUNT_INTERNATIONAL || '5', 10)
 
     // 按发布时间排序，取最新的
     const sorted = newsItems.sort((a, b) => {

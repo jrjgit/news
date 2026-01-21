@@ -9,12 +9,22 @@ export interface NewsWithSummary extends NewsItem {
 
 export class NewsGenerator {
   private aiEnabled: boolean = false
+  private aiSummaryEnabled: boolean = true
+  private aiTranslationEnabled: boolean = true
+  private aiImportanceEnabled: boolean = true
 
   constructor() {
     // 检查是否启用了AI服务
     this.aiEnabled = !!process.env.AI_SERVICE_PROVIDER
+
+    // 检查各个AI功能是否启用
+    this.aiSummaryEnabled = process.env.AI_ENABLE_SUMMARY !== 'false'
+    this.aiTranslationEnabled = process.env.AI_ENABLE_TRANSLATION !== 'false'
+    this.aiImportanceEnabled = process.env.AI_ENABLE_IMPORTANCE !== 'false'
+
     if (this.aiEnabled) {
       console.log('AI服务已启用，将使用AI生成播报脚本')
+      console.log(`AI功能状态: 摘要=${this.aiSummaryEnabled}, 翻译=${this.aiTranslationEnabled}, 重要性=${this.aiImportanceEnabled}`)
     }
   }
 
@@ -235,8 +245,9 @@ export class NewsGenerator {
    * 批量生成新闻摘要
    */
   async batchGenerateSummaries(newsItems: NewsItem[]): Promise<NewsWithSummary[]> {
-    if (!this.aiEnabled) {
-      // 如果AI未启用，返回空摘要
+    if (!this.aiEnabled || !this.aiSummaryEnabled) {
+      // 如果AI未启用或摘要功能未启用，返回简化内容
+      console.log('AI摘要功能已禁用，使用简化内容')
       return newsItems.map(item => ({ ...item, summary: this.simplifyContent(item.content) }))
     }
 
@@ -286,7 +297,8 @@ export class NewsGenerator {
   ): Promise<NewsWithSummary[]> {
     const internationalNews = newsItems.filter(item => item.category === 'INTERNATIONAL')
 
-    if (internationalNews.length === 0 || !this.aiEnabled) {
+    if (internationalNews.length === 0 || !this.aiEnabled || !this.aiTranslationEnabled) {
+      console.log('AI翻译功能已禁用')
       return newsItems.map(item => ({ ...item }))
     }
 
@@ -343,8 +355,9 @@ export class NewsGenerator {
   async batchEvaluateImportance(
     newsItems: NewsItem[]
   ): Promise<NewsWithSummary[]> {
-    if (!this.aiEnabled) {
-      // 如果AI未启用，返回默认重要性
+    if (!this.aiEnabled || !this.aiImportanceEnabled) {
+      // 如果AI未启用或重要性评估功能未启用，返回默认重要性
+      console.log('AI重要性评估功能已禁用，使用默认评分')
       return newsItems.map(item => ({ ...item, importance: 3 }))
     }
 
