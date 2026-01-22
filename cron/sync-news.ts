@@ -156,33 +156,52 @@ export async function syncNews(
     // 生成单条新闻音频
     reportProgress('生成单条音频', 92, '正在生成单条新闻音频...')
 
-    const audioPromises = newsWithImportance.map(async (news, index) => {
-      try {
-        const individualScript = newsGenerator.generateIndividualScript(news)
-        const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, index + 1)
-        return { news, audioUrl: newsAudioUrl, script: individualScript, error: null }
-      } catch (error) {
-        console.error(`生成新闻 ${index + 1} 音频失败:`, error)
-        return {
-          news,
-          audioUrl: null,
-          script: newsGenerator.generateIndividualScript(news),
-          error: error instanceof Error ? error.message : String(error),
-        }
-      }
-    })
+    // 分批处理，每批4个，减少并发压力
+    const batchSize = 4
+    const allResults: Array<{
+      news: NewsWithSummary
+      audioUrl: string | null
+      script: string
+      error: string | null
+    }> = []
 
-    const audioResults = await Promise.all(audioPromises)
+    for (let i = 0; i < newsWithImportance.length; i += batchSize) {
+      const batch = newsWithImportance.slice(i, i + batchSize)
+      const batchIndex = Math.floor(i / batchSize) + 1
+      const totalBatches = Math.ceil(newsWithImportance.length / batchSize)
+
+      console.log(`生成音频批次 ${batchIndex}/${totalBatches}，共 ${batch.length} 条`)
+
+      const audioPromises = batch.map(async (news, index) => {
+        const globalIndex = i + index
+        try {
+          const individualScript = newsGenerator.generateIndividualScript(news)
+          const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, globalIndex + 1)
+          return { news, audioUrl: newsAudioUrl, script: individualScript, error: null }
+        } catch (error) {
+          console.error(`生成新闻 ${globalIndex + 1} 音频失败:`, error)
+          return {
+            news,
+            audioUrl: null,
+            script: newsGenerator.generateIndividualScript(news),
+            error: error instanceof Error ? error.message : String(error),
+          }
+        }
+      })
+
+      const batchResults = await Promise.all(audioPromises)
+      allResults.push(...batchResults)
+    }
 
     // 统计失败的音频生成
-    const failedAudio = audioResults.filter((r) => r.error).map((r) => r.error!)
+    const failedAudio = allResults.filter((r) => r.error).map((r) => r.error!)
 
     // 保存到数据库
     reportProgress('保存数据', 95, '正在保存到数据库...')
 
     const savedNews = []
 
-    for (const { news, audioUrl, script } of audioResults) {
+    for (const { news, audioUrl, script } of allResults) {
       const newsWithSummary = news as NewsWithSummary
 
       const saved = await prisma.news.create({

@@ -61,18 +61,18 @@ export interface SyncConfig {
 
 // AI配置 - glm-4v 并发10个
 export const aiConfig: AIConfig = {
-  requestDelay: 6000, // 6秒延迟（并发10个 = 每6秒1个）
-  requestTimeout: 45000, // 45秒超时
-  batchSize: 4, // 每次批量处理4条
+  requestDelay: 2000, // 2秒延迟（并发10个 = 每2秒1个请求，更快）
+  requestTimeout: 60000, // 60秒超时（更长）
+  batchSize: 8, // 每次批量处理8条（充分利用并发）
   maxRetries: 4, // 最多重试4次
-  // 渐进式退避：5s → 15s → 30s → 60s
-  retryDelays: [5000, 15000, 30000, 60000],
-  rateLimitBackoff: 90000, // 遇到速率限制时等待90秒
+  // 渐进式退避：2s → 6s → 12s → 24s（更短）
+  retryDelays: [2000, 6000, 12000, 24000],
+  rateLimitBackoff: 30000, // 遇到速率限制时等待30秒（更短）
   rateLimitRequestsPerMinute: 10, // glm-4v 并发10个
   // 熔断器配置
   circuitBreaker: {
     failureThreshold: 3, // 连续3次失败开启熔断
-    timeout: 180000, // 3分钟后尝试恢复
+    timeout: 120000, // 2分钟后尝试恢复
     halfOpenRequests: 2, // 半开状态下允许2个测试请求
   },
   // 任务队列配置
@@ -85,16 +85,16 @@ export const aiConfig: AIConfig = {
 
 // 音频配置
 export const audioConfig: AudioConfig = {
-  generationTimeout: 180000, // 180秒超时（更长）
-  generationDelay: 3000, // 3秒延迟
+  generationTimeout: 300000, // 300秒超时
+  generationDelay: 1000, // 1秒延迟
   maxTextLength: 200, // 最大200字
   maxRetries: 3, // 最多重试3次
-  retryDelay: 5000, // 重试间隔5秒（更长）
+  retryDelay: 5000, // 重试间隔5秒
 }
 
 // 同步配置 - 后台任务模式
 export const syncConfig: SyncConfig = {
-  stepDelay: 10000, // 步骤间10秒延迟（给API配额恢复时间）
+  stepDelay: 2000, // 步骤间2秒延迟（更短）
 }
 
 /**

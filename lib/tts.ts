@@ -89,9 +89,9 @@ export class EdgeTTS {
         lastError = error instanceof Error ? error : new Error(String(error))
         console.warn(`音频生成失败 (尝试 ${attempt + 1}/${maxRetries + 1}):`, lastError.message)
 
-        // 如果不是最后一次尝试，等待2秒后重试
+        // 减少重试等待时间：2秒 -> 1秒
         if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          await new Promise(resolve => setTimeout(resolve, 1000))
         }
       }
     }
