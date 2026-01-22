@@ -73,8 +73,8 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
           setTimeout(() => reject(new Error(`${operationName}超时`)), aiConfig.requestTimeout)
         )
 
-        const result = await Promise.race([requestFn(), timeoutPromise]) as T
-        return result
+        const result = await Promise.race([requestFn(), timeoutPromise])
+        return result as T
       } catch (error: unknown) {
         lastError = error instanceof Error ? error : new Error(String(error))
 
@@ -160,12 +160,18 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
           ],
           temperature: 0.7,
           max_tokens: 500,
+          // @ts-ignore 智谱AI支持disable_thinking参数
+          extra: {
+            disable_thinking: true, // 禁用思考过程，加快响应
+          },
         }),
         '新闻摘要'
       )
 
-      const message = response.choices[0]?.message as ZhipiChatCompletionMessage
-      const summary = (message?.content || message?.reasoning_content)?.trim()
+      const chatResponse = response as OpenAI.ChatCompletion
+      const message = chatResponse.choices[0]?.message as ZhipiChatCompletionMessage
+      // 只取最终回复content，忽略思考过程reasoning_content
+      const summary = message?.content?.trim() || message?.reasoning_content?.trim()
 
       if (!summary) {
         console.error('智谱AI: 未收到有效的摘要响应')
@@ -204,12 +210,18 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
           ],
           temperature: 0.3,
           max_tokens: 1000,
+          // @ts-ignore 智谱AI支持disable_thinking参数
+          extra: {
+            disable_thinking: true, // 禁用思考过程，加快响应
+          },
         }),
         '内容翻译'
       )
 
-      const message = response.choices[0]?.message as ZhipiChatCompletionMessage
-      const translation = (message?.content || message?.reasoning_content)?.trim()
+      const chatResponse = response as OpenAI.ChatCompletion
+      const message = chatResponse.choices[0]?.message as ZhipiChatCompletionMessage
+      // 只取最终回复content，忽略思考过程reasoning_content
+      const translation = message?.content?.trim() || message?.reasoning_content?.trim()
 
       if (!translation) {
         console.error('智谱AI: 未收到有效的翻译响应')
@@ -251,14 +263,20 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
           ],
           temperature: 0.8,
           max_tokens: 2000,
+          // @ts-ignore 智谱AI支持disable_thinking参数
+          extra: {
+            disable_thinking: true, // 禁用思考过程，加快响应
+          },
         }),
         '播报脚本生成'
       )
 
-      console.log(`智谱AI: 收到响应，choices=${response.choices?.length}`)
+      const chatResponse = response as OpenAI.ChatCompletion
+      console.log(`智谱AI: 收到响应，choices=${chatResponse.choices?.length}`)
 
-      const message = response.choices[0]?.message as ZhipiChatCompletionMessage
-      const script = (message?.content || message?.reasoning_content)?.trim()
+      const message = chatResponse.choices[0]?.message as ZhipiChatCompletionMessage
+      // 只取最终回复content，忽略思考过程reasoning_content
+      const script = message?.content?.trim() || message?.reasoning_content?.trim()
 
       if (!script) {
         console.error('智谱AI: 未收到有效的脚本响应')
@@ -298,12 +316,18 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
           ],
           temperature: 0.1,
           max_tokens: 50,
+          // @ts-ignore 智谱AI支持disable_thinking参数
+          extra: {
+            disable_thinking: true, // 禁用思考过程，加快响应
+          },
         }),
         '重要性评估'
       )
 
-      const message = response.choices[0]?.message as ZhipiChatCompletionMessage
-      const scoreText = (message?.content || message?.reasoning_content)?.trim()
+      const chatResponse = response as OpenAI.ChatCompletion
+      const message = chatResponse.choices[0]?.message as ZhipiChatCompletionMessage
+      // 只取最终回复content，忽略思考过程reasoning_content
+      const scoreText = message?.content?.trim() || message?.reasoning_content?.trim()
 
       if (!scoreText) {
         console.error('智谱AI: 未收到有效的评分响应')
@@ -358,6 +382,10 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
           },
         ],
         max_tokens: 50,
+        // @ts-ignore 智谱AI支持disable_thinking参数
+        extra: {
+          disable_thinking: true, // 禁用思考过程，加快响应
+        },
       }, {
         signal: controller.signal,
       })
@@ -366,7 +394,8 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
 
       const success = !!response.choices?.[0]?.message
       const message = response.choices?.[0]?.message as ZhipiChatCompletionMessage
-      const content = (message?.content || message?.reasoning_content) || '(空)'
+      // 只取最终回复content，忽略思考过程reasoning_content
+      const content = message?.content || '(空)'
 
       if (success) {
         console.log(`智谱AI健康检查通过，响应内容: "${content}"`)
