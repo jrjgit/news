@@ -1,5 +1,5 @@
 import { NewsItem } from './rss-parser'
-import { AIService, PodcastScriptRequest } from './ai-service'
+import { AIService, PodcastScriptRequest, type AIServiceResponse } from './ai-service'
 
 export interface NewsWithSummary extends NewsItem {
   summary?: string
@@ -285,7 +285,7 @@ export class NewsGenerator {
       const response = await Promise.race([
         AIService.batchSummarizeNews(requests),
         timeoutPromise,
-      ]) as any
+      ]) as AIServiceResponse<string[]>
       const duration = Date.now() - startTime
 
       console.log(`批量生成摘要完成，耗时 ${duration}ms`)
@@ -336,7 +336,7 @@ export class NewsGenerator {
       const response = await Promise.race([
         AIService.batchTranslate(requests),
         timeoutPromise,
-      ]) as any
+      ]) as AIServiceResponse<string[]>
       const duration = Date.now() - startTime
 
       console.log(`批量翻译完成，耗时 ${duration}ms`)
@@ -399,7 +399,7 @@ export class NewsGenerator {
         const response = await Promise.race([
           AIService.evaluateImportance(item.title, item.content),
           timeoutPromise,
-        ]) as any
+        ]) as AIServiceResponse<number>
         const duration = Date.now() - startTime
 
         results.push({

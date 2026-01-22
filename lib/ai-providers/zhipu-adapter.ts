@@ -58,6 +58,7 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
 
   /**
    * 执行API请求（带重试机制和超时控制）
+   * 使用优化后的退避策略
    */
   private async executeRequest<T>(
     requestFn: () => Promise<T>,
@@ -76,26 +77,42 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
         return result
       } catch (error: unknown) {
         lastError = error instanceof Error ? error : new Error(String(error))
-        
-        // 检查是否是429错误（速率限制）
-        const isRateLimitError = this.isRateLimitError(error)
 
-        if (isRateLimitError && attempt < aiConfig.maxRetries) {
-          const backoffDelay = getExponentialBackoffDelay(attempt)
-          console.warn(`${operationName}遇到速率限制，${backoffDelay / 1000}秒后重试 (尝试 ${attempt + 1}/${aiConfig.maxRetries + 1})`)
-          await sleep(backoffDelay)
-          continue
+        // 检查是否是速率限制错误
+        const isRateLimitError = this.isRateLimitError(error)
+        const isTimeoutError = lastError.message.includes('超时')
+
+        if (isRateLimitError) {
+          // 速率限制错误：使用更长的等待时间
+          if (attempt < aiConfig.maxRetries) {
+            const backoffDelay = getExponentialBackoffDelay(attempt)
+            console.warn(`${operationName}遇到速率限制，${backoffDelay / 1000}秒后重试 (尝试 ${attempt + 1}/${aiConfig.maxRetries + 1})`)
+            await sleep(backoffDelay)
+            continue
+          }
+        } else if (isTimeoutError) {
+          // 超时错误：使用渐进式退避
+          if (attempt < aiConfig.maxRetries) {
+            const backoffDelay = getExponentialBackoffDelay(attempt)
+            console.warn(`${operationName}超时，${backoffDelay / 1000}秒后重试 (尝试 ${attempt + 1}/${aiConfig.maxRetries + 1})`)
+            await sleep(backoffDelay)
+            continue
+          }
+        } else {
+          // 其他错误：使用较短的等待
+          if (attempt < aiConfig.maxRetries) {
+            const backoffDelay = getExponentialBackoffDelay(attempt)
+            console.warn(`${operationName}失败，${backoffDelay / 1000}秒后重试 (尝试 ${attempt + 1}/${aiConfig.maxRetries + 1})`)
+            await sleep(backoffDelay)
+            continue
+          }
         }
 
-        // 如果不是速率限制错误或已达到最大重试次数，直接抛出错误
+        // 如果已达到最大重试次数，直接抛出错误
         if (attempt === aiConfig.maxRetries) {
-          console.error(`${operationName}失败:`, lastError.message)
+          console.error(`${operationName}在${attempt + 1}次尝试后失败:`, lastError.message)
           throw lastError
         }
-
-        // 其他错误也重试
-        console.warn(`${operationName}失败，${aiConfig.retryDelayBase / 1000}秒后重试 (尝试 ${attempt + 1}/${aiConfig.maxRetries + 1})`)
-        await sleep(aiConfig.retryDelayBase)
       }
     }
 
@@ -106,8 +123,21 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
    * 检查是否是速率限制错误
    */
   private isRateLimitError(error: unknown): boolean {
-    const err = error as any
-    return err?.status === 429 || err?.code === '1302' || err?.message?.includes('429') || err?.message?.includes('并发数过高')
+    if (error === null || error === undefined) {
+      return false
+    }
+
+    const err = error as Record<string, unknown>
+    const message = String(err?.message ?? '')
+
+    return (
+      err?.status === 429 ||
+      err?.code === '1302' ||
+      message.includes('429') ||
+      message.includes('并发数过高') ||
+      message.includes('rate limit') ||
+      message.includes('速率限制')
+    )
   }
 
   async summarizeNews(request: NewsSummaryRequest): Promise<AIServiceResponse<string>> {
