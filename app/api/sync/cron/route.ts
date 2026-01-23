@@ -7,64 +7,77 @@
  *   "crons": [
  *     {
  *       "path": "/api/sync/cron",
- *       "schedule": "0 2 * * *"
+ *       "schedule": "0 18 * * *"
  *     }
  *   ]
  * }
  */
 
 import { NextResponse } from 'next/server'
-import { syncNews } from '@/cron/sync-news'
+import { syncNews, type SyncResult } from '@/cron/sync-news'
 import { aiCircuitBreaker } from '@/lib/circuit-breaker'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const startTime = Date.now()
+  const timeoutMs = 250000 // 250秒
+
+  console.log('[Cron] 收到 Cron 触发请求')
+
+  // 超时控制器
+  const timeoutController = new AbortController()
+  const timeoutId = setTimeout(() => {
+    timeoutController.abort()
+  }, timeoutMs)
 
   try {
-    console.log('[Cron] 收到 Cron 触发请求，开始执行新闻同步')
-
-    // 直接执行同步任务
-    const result = await syncNews(
-      false, // 不强制刷新
-      10,    // 新闻数量
-      undefined, // 无进度回调
-      aiCircuitBreaker
-    )
+    const result = await Promise.race([
+      syncNews(false, 10, undefined, aiCircuitBreaker),
+      new Promise<SyncResult>((_, reject) => 
+        timeoutController.signal.addEventListener('abort', () => {
+          reject(new Error('同步超时'))
+        })
+      )
+    ]) as SyncResult
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2)
 
-    if (result.success) {
-      console.log(`[Cron] 同步成功: ${result.newsGenerated} 条新闻，耗时 ${duration} 秒`)
-      return NextResponse.json({
-        success: true,
-        message: '同步成功',
-        newsGenerated: result.newsGenerated,
-        duration: `${duration}秒`,
-      })
-    } else {
-      console.log(`[Cron] 同步失败: ${result.error}`)
+    console.log(`[Cron] 同步完成，耗时 ${duration}秒，生成 ${result.newsGenerated} 条新闻`)
+
+    return NextResponse.json({
+      success: result.success,
+      message: result.success ? '同步成功' : '同步部分失败',
+      newsGenerated: result.newsGenerated,
+      duration: `${duration}秒`,
+    })
+  } catch (error) {
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2)
+    const errorMessage = error instanceof Error ? error.message : '处理失败'
+
+    console.error('[Cron] 处理失败:', errorMessage)
+
+    // 如果是超时，返回特殊状态码
+    if (errorMessage.includes('超时')) {
       return NextResponse.json(
         {
           success: false,
-          error: result.error || '同步失败',
+          error: '同步超时',
           duration: `${duration}秒`,
         },
-        { status: 500 }
+        { status: 504 }
       )
     }
-  } catch (error) {
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2)
-    console.error('[Cron] 处理失败:', error)
 
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : '处理失败',
+        error: errorMessage,
         duration: `${duration}秒`,
       },
       { status: 500 }
     )
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
