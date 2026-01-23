@@ -33,12 +33,18 @@ export interface SyncResult {
 
 /**
  * 同步新闻主流程（支持进度回调和熔断器）
+ * @param forceRefresh 是否强制刷新
+ * @param newsCount 新闻数量
+ * @param onProgress 进度回调
+ * @param circuitBreaker 熔断器
+ * @param generateAudio 是否生成音频（默认true，用于手动同步；cron模式下由调用方控制）
  */
 export async function syncNews(
   forceRefresh: boolean = false,
   newsCount: number = 10,
   onProgress?: (progress: SyncProgress) => void,
-  circuitBreaker?: CircuitBreaker
+  circuitBreaker?: CircuitBreaker,
+  generateAudio: boolean = true
 ): Promise<SyncResult> {
   const today = new Date()
   const dateStr = today.toISOString().split('T')[0]
@@ -147,12 +153,14 @@ export async function syncNews(
 
     reportProgress('生成播报文案', 85, '播报文案生成完成')
 
-    // 步骤7: 将音频生成加入后台队列（不再实时生成）
-    reportProgress('生成音频', 90, '音频生成已加入后台队列...')
-
-    // 将播报脚本加入音频生成队列
-    await enqueueAudioJob(dateStr, script)
-    console.log(`播报音频已加入后台队列`)
+    // 步骤7: 根据参数决定是否生成音频
+    if (generateAudio) {
+      reportProgress('生成音频', 90, '音频生成已加入后台队列...')
+      await enqueueAudioJob(dateStr, script)
+      console.log(`播报音频已加入后台队列`)
+    } else {
+      console.log(`跳过音频生成（由调用方控制）`)
+    }
 
     // 保存到数据库 - 批量写入
     reportProgress('保存数据', 95, '正在保存到数据库...')
