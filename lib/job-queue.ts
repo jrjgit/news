@@ -1,9 +1,56 @@
 /**
- * 任务队列服务 - 使用 Vercel KV 实现
+ * 任务队列服务 - 支持 Vercel KV 或标准 Redis
  * 适合 Vercel Serverless 环境
  */
 
-import { kv } from '@vercel/kv'
+// 支持两种 Redis 连接方式
+let kv: any
+let useKV = false
+
+// 初始化 Redis 客户端
+async function initRedis() {
+  if (kv) return
+
+  // 优先使用 Vercel KV
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    try {
+      const kvModule = await import('@vercel/kv')
+      kv = kvModule.kv
+      useKV = true
+      console.log('[JobQueue] 使用 Vercel KV')
+      return
+    } catch (e) {
+      console.warn('[JobQueue] Vercel KV 加载失败，尝试 REDIS_URL')
+    }
+  }
+
+  // 使用标准 REDIS_URL
+  if (process.env.REDIS_URL) {
+    try {
+      // 标准 Redis URL 解析
+      const url = new URL(process.env.REDIS_URL)
+      const { Redis } = await import('@upstash/redis')
+      kv = new Redis({
+        url: url.origin,
+        token: url.password || '',
+      })
+      useKV = false
+      console.log('[JobQueue] 使用 REDIS_URL')
+      return
+    } catch (e) {
+      console.warn('[JobQueue] REDIS_URL 加载失败:', e)
+    }
+  }
+
+  // 如果都没有，使用内存降级（仅开发环境）
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('[JobQueue] 无 Redis 配置，使用内存降级')
+    kv = null
+    return
+  }
+
+  throw new Error('未配置 Redis 环境变量 (KV_REST_API_URL 或 REDIS_URL)')
+}
 
 // 任务进度接口
 export interface SyncProgress {
@@ -50,6 +97,8 @@ const QUEUE_PREFIX = 'news-sync:queue:'
  * 创建同步任务
  */
 export async function enqueueSyncTask(options: SyncJobData): Promise<string> {
+  await initRedis()
+
   const jobId = `sync-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
   
   const jobData = {
@@ -65,15 +114,20 @@ export async function enqueueSyncTask(options: SyncJobData): Promise<string> {
     result: null,
   }
 
-  // 保存任务数据
-  await kv.set(`${JOB_PREFIX}${jobId}`, JSON.stringify(jobData))
+  const jobDataStr = JSON.stringify(jobData)
 
-  // 添加到队列（按创建时间排序）
-  const queueKey = `${QUEUE_PREFIX}pending`
-  await kv.zadd(queueKey, {
-    score: Date.now(),
-    member: jobId,
-  })
+  if (useKV && kv) {
+    await kv.set(`${JOB_PREFIX}${jobId}`, jobDataStr)
+    await kv.zadd(`${QUEUE_PREFIX}pending`, {
+      score: Date.now(),
+      member: jobId,
+    })
+  } else if (kv) {
+    await kv.set(`${JOB_PREFIX}${jobId}`, jobDataStr)
+    await kv.zadd(`${QUEUE_PREFIX}pending`, { score: Date.now(), member: jobId })
+  } else {
+    console.warn('[JobQueue] Redis 不可用，跳过任务入队')
+  }
 
   return jobId
 }
@@ -82,23 +136,37 @@ export async function enqueueSyncTask(options: SyncJobData): Promise<string> {
  * 获取任务状态
  */
 export async function getJobStatus(jobId: string): Promise<JobStatus | null> {
-  const jobDataStr = await kv.get<string>(`${JOB_PREFIX}${jobId}`)
+  await initRedis()
 
-  if (!jobDataStr) {
-    return null
+  if (useKV && kv) {
+    const jobDataStr = await kv.get(`${JOB_PREFIX}${jobId}`)
+    if (!jobDataStr) return null
+    const jobData = typeof jobDataStr === 'string' ? JSON.parse(jobDataStr) : jobDataStr
+    return {
+      id: jobData.id,
+      status: jobData.status,
+      progress: jobData.progress,
+      createdAt: jobData.createdAt,
+      finishedAt: jobData.finishedAt,
+      result: jobData.result,
+      data: jobData.data,
+    }
+  } else if (kv) {
+    const jobData = await kv.get(`${JOB_PREFIX}${jobId}`)
+    if (!jobData) return null
+    const parsed = typeof jobData === 'string' ? JSON.parse(jobData) : jobData
+    return {
+      id: parsed.id,
+      status: parsed.status,
+      progress: parsed.progress,
+      createdAt: parsed.createdAt,
+      finishedAt: parsed.finishedAt,
+      result: parsed.result,
+      data: parsed.data,
+    }
   }
 
-  const jobData = JSON.parse(jobDataStr)
-
-  return {
-    id: jobData.id,
-    status: jobData.status,
-    progress: jobData.progress,
-    createdAt: jobData.createdAt,
-    finishedAt: jobData.finishedAt,
-    result: jobData.result,
-    data: jobData.data,
-  }
+  return null
 }
 
 /**
@@ -113,59 +181,72 @@ export async function updateJobStatus(
     finishedAt: string
   }>
 ): Promise<void> {
-  const jobDataStr = await kv.get<string>(`${JOB_PREFIX}${jobId}`)
-  
-  if (!jobDataStr) {
+  await initRedis()
+
+  const current = await getJobStatus(jobId)
+  if (!current) {
     throw new Error(`任务 ${jobId} 不存在`)
   }
 
-  const jobData = JSON.parse(jobDataStr)
-  const updatedData = { ...jobData, ...updates }
+  const updatedData = { ...current, ...updates }
 
   // 如果任务完成，从队列中移除
   if (updates.status === 'succeeded' || updates.status === 'failed') {
     const queueKey = `${QUEUE_PREFIX}pending`
-    await kv.zrem(queueKey, jobId)
+    if (useKV && kv) {
+      await kv.zrem(queueKey, jobId)
+    } else if (kv) {
+      await kv.zrem(queueKey, jobId)
+    }
     updatedData.finishedAt = new Date().toISOString()
   }
 
-  await kv.set(`${JOB_PREFIX}${jobId}`, JSON.stringify(updatedData))
+  const updatedStr = JSON.stringify(updatedData)
+
+  if (useKV && kv) {
+    await kv.set(`${JOB_PREFIX}${jobId}`, updatedStr)
+  } else if (kv) {
+    await kv.set(`${JOB_PREFIX}${jobId}`, updatedStr)
+  }
 }
 
 /**
  * 获取队列中待处理的任务
  */
 export async function getNextPendingJob(): Promise<string | null> {
+  await initRedis()
+
   const queueKey = `${QUEUE_PREFIX}pending`
 
-  // 获取最早的任务
-  const result = (await kv.zrange(queueKey, 0, 0)) as string[]
-
-  if (!result || result.length === 0) {
-    return null
+  if (useKV && kv) {
+    const result = await kv.zrange(queueKey, 0, 0)
+    return (result as string[])[0] || null
+  } else if (kv) {
+    const result = await kv.zrange(queueKey, 0, 0)
+    return (result as string[])[0] || null
   }
 
-  return result[0] || null
+  return null
 }
 
 /**
  * 取消任务
  */
 export async function cancelJob(jobId: string): Promise<boolean> {
-  const jobDataStr = await kv.get<string>(`${JOB_PREFIX}${jobId}`)
-  
-  if (!jobDataStr) {
-    return false
-  }
+  await initRedis()
 
-  const jobData = JSON.parse(jobDataStr)
-  
-  // 从队列中移除
+  const current = await getJobStatus(jobId)
+  if (!current) return false
+
   const queueKey = `${QUEUE_PREFIX}pending`
-  await kv.zrem(queueKey, jobId)
   
-  // 删除任务数据
-  await kv.del(`${JOB_PREFIX}${jobId}`)
+  if (useKV && kv) {
+    await kv.zrem(queueKey, jobId)
+    await kv.del(`${JOB_PREFIX}${jobId}`)
+  } else if (kv) {
+    await kv.zrem(queueKey, jobId)
+    await kv.del(`${JOB_PREFIX}${jobId}`)
+  }
   
   return true
 }
@@ -179,8 +260,16 @@ export async function getQueueStats(): Promise<{
   succeeded: number
   failed: number
 }> {
+  await initRedis()
+
   const queueKey = `${QUEUE_PREFIX}pending`
-  const pending = await kv.zcard(queueKey)
+  let pending = 0
+
+  if (useKV && kv) {
+    pending = await kv.zcard(queueKey)
+  } else if (kv) {
+    pending = await kv.zcard(queueKey)
+  }
   
   return { pending, active: 0, succeeded: 0, failed: 0 }
 }
@@ -189,24 +278,37 @@ export async function getQueueStats(): Promise<{
  * 清理过期任务（保留24小时）
  */
 export async function cleanupExpiredJobs(): Promise<number> {
+  await initRedis()
+
   const queueKey = `${QUEUE_PREFIX}pending`
   const now = Date.now()
   const expireTime = 24 * 60 * 60 * 1000 // 24小时
-
-  // 获取所有过期任务
-  const allJobs = await kv.zrange(queueKey, 0, -1)
   let cleaned = 0
 
-  for (const jobId of allJobs) {
-    const jobDataStr = await kv.get<string>(`${JOB_PREFIX}${jobId}`)
-    if (jobDataStr) {
-      const jobData = JSON.parse(jobDataStr)
-      const jobTime = new Date(jobData.createdAt).getTime()
-      
-      if (now - jobTime > expireTime) {
-        await kv.del(`${JOB_PREFIX}${jobId}`)
-        await kv.zrem(queueKey, jobId)
-        cleaned++
+  if (useKV && kv) {
+    const allJobs = await kv.zrange(queueKey, 0, -1)
+    for (const jobId of allJobs as string[]) {
+      const status = await getJobStatus(jobId)
+      if (status) {
+        const jobTime = new Date(status.createdAt).getTime()
+        if (now - jobTime > expireTime) {
+          await kv.del(`${JOB_PREFIX}${jobId}`)
+          await kv.zrem(queueKey, jobId)
+          cleaned++
+        }
+      }
+    }
+  } else if (kv) {
+    const allJobs = await kv.zrange(queueKey, 0, -1)
+    for (const jobId of allJobs as string[]) {
+      const status = await getJobStatus(jobId)
+      if (status) {
+        const jobTime = new Date(status.createdAt).getTime()
+        if (now - jobTime > expireTime) {
+          await kv.del(`${JOB_PREFIX}${jobId}`)
+          await kv.zrem(queueKey, jobId)
+          cleaned++
+        }
       }
     }
   }

@@ -7,9 +7,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { newsGenerator } from '@/lib/news-generator'
 
-// 检查 KV 是否可用
-const isKVConfigured = () => {
-  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+// 检查 Redis 是否可用（KV 或 REDIS_URL）
+const isRedisConfigured = () => {
+  // Vercel KV
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    return true
+  }
+  // 标准 REDIS_URL
+  if (process.env.REDIS_URL) {
+    return true
+  }
+  return false
 }
 
 /**
@@ -28,8 +36,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 如果 KV 可用，查询任务队列状态
-    if (isKVConfigured()) {
+    // 如果 Redis 可用，查询任务队列状态
+    if (isRedisConfigured()) {
       try {
         const { getLatestAudioJob } = await import('@/lib/audio-queue')
         const audioJob = await getLatestAudioJob(date)
@@ -103,12 +111,12 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // 检查是否配置了 KV
-  if (!isKVConfigured()) {
+  // 检查是否配置了 Redis
+  if (!isRedisConfigured()) {
     return NextResponse.json(
       { 
         success: false, 
-        error: '音频生成功能暂不可用（KV 环境变量未配置）' 
+        error: '音频生成功能暂不可用（Redis 环境变量未配置）' 
       },
       { status: 503 }
     )
