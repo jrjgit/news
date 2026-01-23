@@ -7,6 +7,7 @@ interface News {
   id: number
   title: string
   content: string
+  translatedContent?: string | null
   summary?: string
   source: string
   category: 'DOMESTIC' | 'INTERNATIONAL'
@@ -87,10 +88,12 @@ export default function NewsCard({ news, isFavorite = false, onToggleFavorite }:
         </div>
       )}
 
-      {/* 新闻内容 */}
+      {/* 新闻内容 - 国际新闻优先显示翻译 */}
       <div className="mb-3">
         <p className={`text-gray-300 leading-relaxed ${isExpanded ? '' : 'line-clamp-3'}`}>
-          {news.content}
+          {news.category === 'INTERNATIONAL' && news.translatedContent
+            ? news.translatedContent
+            : news.content}
         </p>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
