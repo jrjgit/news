@@ -4,9 +4,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getLatestAudioJob, enqueueAudioJob } from '@/lib/audio-queue'
 import { prisma } from '@/lib/db'
 import { newsGenerator } from '@/lib/news-generator'
+
+// 检查 KV 是否可用
+const isKVConfigured = () => {
+  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+}
 
 /**
  * GET /api/audio/status?date=2026-01-23
@@ -24,34 +28,46 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 查询最新的音频任务状态
-    const audioJob = await getLatestAudioJob(date)
+    // 如果 KV 可用，查询任务队列状态
+    if (isKVConfigured()) {
+      try {
+        const { getLatestAudioJob } = await import('@/lib/audio-queue')
+        const audioJob = await getLatestAudioJob(date)
 
-    if (audioJob) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          status: audioJob.status,
-          audioUrl: audioJob.audioUrl,
-          progress: audioJob.progress,
-        },
-      })
+        if (audioJob) {
+          return NextResponse.json({
+            success: true,
+            data: {
+              status: audioJob.status,
+              audioUrl: audioJob.audioUrl,
+              progress: audioJob.progress,
+            },
+          })
+        }
+      } catch (kvError) {
+        console.warn('KV 查询失败，降级到 Blob 检查:', kvError)
+      }
     }
 
-    // 如果没有待处理的音频任务，检查是否有已生成的音频
     // 尝试直接检查 Blob 存储
-    const { list } = await import('@vercel/blob')
-    const { blobs } = await list({ prefix: `audio/daily-news-${date}` })
-    
-    if (blobs.length > 0) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          status: 'completed',
-          audioUrl: blobs[0].url,
-          progress: 100,
-        },
-      })
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      try {
+        const { list } = await import('@vercel/blob')
+        const { blobs } = await list({ prefix: `audio/daily-news-${date}` })
+        
+        if (blobs.length > 0) {
+          return NextResponse.json({
+            success: true,
+            data: {
+              status: 'completed',
+              audioUrl: blobs[0].url,
+              progress: 100,
+            },
+          })
+        }
+      } catch (blobError) {
+        console.warn('Blob 检查失败:', blobError)
+      }
     }
 
     // 没有找到音频，返回未生成状态
@@ -84,6 +100,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { success: false, error: '缺少 date 参数' },
       { status: 400 }
+    )
+  }
+
+  // 检查是否配置了 KV
+  if (!isKVConfigured()) {
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: '音频生成功能暂不可用（KV 环境变量未配置）' 
+      },
+      { status: 503 }
     )
   }
 
@@ -137,6 +164,7 @@ export async function POST(request: NextRequest) {
     )
 
     // 创建音频生成任务
+    const { enqueueAudioJob } = await import('@/lib/audio-queue')
     const jobId = await enqueueAudioJob(date, script)
 
     return NextResponse.json({

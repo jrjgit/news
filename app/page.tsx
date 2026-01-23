@@ -30,9 +30,10 @@ const CACHE_DURATION = 60 * 1000 // 缓存1分钟
 
 // 音频状态
 interface AudioStatus {
-  status: 'not_generated' | 'pending' | 'processing' | 'completed'
+  status: 'not_generated' | 'pending' | 'processing' | 'completed' | 'unavailable'
   audioUrl: string | null
   progress: number
+  error?: string
 }
 
 export default function Home() {
@@ -47,6 +48,7 @@ export default function Home() {
     progress: 0,
   })
   const [audioLoading, setAudioLoading] = useState(false)
+  const [audioUnavailable, setAudioUnavailable] = useState(false)
 
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
 
@@ -128,6 +130,8 @@ export default function Home() {
 
   // 检查音频状态
   const checkAudioStatus = useCallback(async () => {
+    if (audioUnavailable) return
+
     try {
       const response = await fetch(`/api/audio/status?date=${selectedDate}`)
       const data = await response.json()
@@ -138,14 +142,26 @@ export default function Home() {
           audioUrl: data.data.audioUrl,
           progress: data.data.progress,
         })
+      } else if (data.error && data.error.includes('KV')) {
+        // KV 未配置，标记为不可用
+        setAudioUnavailable(true)
+        setAudioStatus({
+          status: 'unavailable',
+          audioUrl: null,
+          progress: 0,
+          error: '音频功能暂不可用',
+        })
       }
     } catch (error) {
       console.error('检查音频状态失败:', error)
+      // 不标记为不可用，只是静默失败
     }
-  }, [selectedDate])
+  }, [selectedDate, audioUnavailable])
 
   // 触发音频生成
   const triggerAudioGeneration = async () => {
+    if (audioUnavailable) return
+
     try {
       setAudioLoading(true)
       const response = await fetch(`/api/audio/status?date=${selectedDate}`, {
@@ -157,6 +173,15 @@ export default function Home() {
         console.log('音频生成任务已加入队列')
         // 开始轮询音频状态
         checkAudioStatus()
+      } else if (response.status === 503) {
+        // 服务不可用
+        setAudioUnavailable(true)
+        setAudioStatus({
+          status: 'unavailable',
+          audioUrl: null,
+          progress: 0,
+          error: data.error,
+        })
       } else {
         console.error('触发音频生成失败:', data.error)
       }
@@ -169,10 +194,12 @@ export default function Home() {
 
   // 定期检查音频状态
   useEffect(() => {
+    if (audioUnavailable) return
+    
     checkAudioStatus()
     const interval = setInterval(checkAudioStatus, 10000) // 每10秒检查一次
     return () => clearInterval(interval)
-  }, [checkAudioStatus])
+  }, [checkAudioStatus, audioUnavailable])
 
   useEffect(() => {
     fetchNews()
@@ -275,7 +302,7 @@ export default function Home() {
           />
 
           {/* 统一播报音频播放器 */}
-          {!loading && filteredNews.length > 0 && (
+          {!loading && filteredNews.length > 0 && !audioUnavailable && (
             <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 rounded-xl p-4 border border-blue-800/30">
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-blue-400 font-medium">📻 今日新闻播报</span>
