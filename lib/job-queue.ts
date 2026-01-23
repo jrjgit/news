@@ -3,13 +3,23 @@
  * 适合 Vercel Serverless 环境
  */
 
-// 支持两种 Redis 连接方式
+// 支持多种 Redis 连接方式
 let kv: any
 let useKV = false
+let useIoredis = false
 
 // 初始化 Redis 客户端
 async function initRedis() {
   if (kv) return
+
+  // 调试日志
+  console.log('[JobQueue] 检查环境变量:')
+  console.log('  KV_REST_API_URL:', process.env.KV_REST_API_URL ? '已配置' : '未配置')
+  console.log('  KV_REST_API_TOKEN:', process.env.KV_REST_API_TOKEN ? '已配置' : '未配置')
+  console.log('  REDIS_URL:', process.env.REDIS_URL ? '已配置' : '未配置')
+  if (process.env.REDIS_URL) {
+    console.log('  REDIS_URL 值前30字符:', process.env.REDIS_URL.substring(0, 30))
+  }
 
   // 优先使用 Vercel KV
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
@@ -25,18 +35,33 @@ async function initRedis() {
   }
 
   // 使用标准 REDIS_URL
-  if (process.env.REDIS_URL) {
+  if (process.env.REDIS_URL && process.env.REDIS_URL !== 'null') {
     try {
-      // 标准 Redis URL 解析
-      const url = new URL(process.env.REDIS_URL)
-      const { Redis } = await import('@upstash/redis')
-      kv = new Redis({
-        url: url.origin,
-        token: url.password || '',
-      })
-      useKV = false
-      console.log('[JobQueue] 使用 REDIS_URL')
-      return
+      const url = process.env.REDIS_URL
+
+      // 如果是 Upstash HTTP URL（https://）
+      if (url.includes('upstash') && (url.startsWith('https://') || url.startsWith('http://'))) {
+        const { Redis } = await import('@upstash/redis')
+        const urlObj = new URL(url)
+        const token = urlObj.username || urlObj.password || ''
+        kv = new Redis({
+          url: urlObj.origin + urlObj.pathname,
+          token: token,
+        })
+        console.log('[JobQueue] 使用 Upstash Redis')
+        return
+      }
+
+      // 标准 Redis URL（redis:// 或 rediss://），使用 ioredis
+      if (url.startsWith('redis://') || url.startsWith('rediss://')) {
+        const Redis = (await import('ioredis')).default
+        kv = new Redis(url)
+        useIoredis = true
+        console.log('[JobQueue] 使用 ioredis (标准 Redis)')
+        return
+      }
+
+      console.warn('[JobQueue] 无法识别的 REDIS_URL 格式:', url.substring(0, 30))
     } catch (e) {
       console.warn('[JobQueue] REDIS_URL 加载失败:', e)
     }
@@ -116,7 +141,10 @@ export async function enqueueSyncTask(options: SyncJobData): Promise<string> {
 
   const jobDataStr = JSON.stringify(jobData)
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
+    await kv.set(`${JOB_PREFIX}${jobId}`, jobDataStr)
+    await kv.zadd(`${QUEUE_PREFIX}pending`, Date.now(), jobId)
+  } else if (useKV && kv) {
     await kv.set(`${JOB_PREFIX}${jobId}`, jobDataStr)
     await kv.zadd(`${QUEUE_PREFIX}pending`, {
       score: Date.now(),
@@ -138,7 +166,20 @@ export async function enqueueSyncTask(options: SyncJobData): Promise<string> {
 export async function getJobStatus(jobId: string): Promise<JobStatus | null> {
   await initRedis()
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
+    const jobDataStr = await kv.get(`${JOB_PREFIX}${jobId}`)
+    if (!jobDataStr) return null
+    const jobData = typeof jobDataStr === 'string' ? JSON.parse(jobDataStr) : jobDataStr
+    return {
+      id: jobData.id,
+      status: jobData.status,
+      progress: jobData.progress,
+      createdAt: jobData.createdAt,
+      finishedAt: jobData.finishedAt,
+      result: jobData.result,
+      data: jobData.data,
+    }
+  } else if (useKV && kv) {
     const jobDataStr = await kv.get(`${JOB_PREFIX}${jobId}`)
     if (!jobDataStr) return null
     const jobData = typeof jobDataStr === 'string' ? JSON.parse(jobDataStr) : jobDataStr
@@ -193,7 +234,9 @@ export async function updateJobStatus(
   // 如果任务完成，从队列中移除
   if (updates.status === 'succeeded' || updates.status === 'failed') {
     const queueKey = `${QUEUE_PREFIX}pending`
-    if (useKV && kv) {
+    if (useIoredis && kv) {
+      await kv.zrem(queueKey, jobId)
+    } else if (useKV && kv) {
       await kv.zrem(queueKey, jobId)
     } else if (kv) {
       await kv.zrem(queueKey, jobId)
@@ -203,7 +246,9 @@ export async function updateJobStatus(
 
   const updatedStr = JSON.stringify(updatedData)
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
+    await kv.set(`${JOB_PREFIX}${jobId}`, updatedStr)
+  } else if (useKV && kv) {
     await kv.set(`${JOB_PREFIX}${jobId}`, updatedStr)
   } else if (kv) {
     await kv.set(`${JOB_PREFIX}${jobId}`, updatedStr)
@@ -218,7 +263,10 @@ export async function getNextPendingJob(): Promise<string | null> {
 
   const queueKey = `${QUEUE_PREFIX}pending`
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
+    const result = await kv.zrange(queueKey, 0, 0)
+    return (result as string[])[0] || null
+  } else if (useKV && kv) {
     const result = await kv.zrange(queueKey, 0, 0)
     return (result as string[])[0] || null
   } else if (kv) {
@@ -239,15 +287,18 @@ export async function cancelJob(jobId: string): Promise<boolean> {
   if (!current) return false
 
   const queueKey = `${QUEUE_PREFIX}pending`
-  
-  if (useKV && kv) {
+
+  if (useIoredis && kv) {
+    await kv.zrem(queueKey, jobId)
+    await kv.del(`${JOB_PREFIX}${jobId}`)
+  } else if (useKV && kv) {
     await kv.zrem(queueKey, jobId)
     await kv.del(`${JOB_PREFIX}${jobId}`)
   } else if (kv) {
     await kv.zrem(queueKey, jobId)
     await kv.del(`${JOB_PREFIX}${jobId}`)
   }
-  
+
   return true
 }
 
@@ -265,12 +316,14 @@ export async function getQueueStats(): Promise<{
   const queueKey = `${QUEUE_PREFIX}pending`
   let pending = 0
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
+    pending = await kv.zcard(queueKey)
+  } else if (useKV && kv) {
     pending = await kv.zcard(queueKey)
   } else if (kv) {
     pending = await kv.zcard(queueKey)
   }
-  
+
   return { pending, active: 0, succeeded: 0, failed: 0 }
 }
 
@@ -285,7 +338,20 @@ export async function cleanupExpiredJobs(): Promise<number> {
   const expireTime = 24 * 60 * 60 * 1000 // 24小时
   let cleaned = 0
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
+    const allJobs = await kv.zrange(queueKey, 0, -1)
+    for (const jobId of allJobs as string[]) {
+      const status = await getJobStatus(jobId)
+      if (status) {
+        const jobTime = new Date(status.createdAt).getTime()
+        if (now - jobTime > expireTime) {
+          await kv.del(`${JOB_PREFIX}${jobId}`)
+          await kv.zrem(queueKey, jobId)
+          cleaned++
+        }
+      }
+    }
+  } else if (useKV && kv) {
     const allJobs = await kv.zrange(queueKey, 0, -1)
     for (const jobId of allJobs as string[]) {
       const status = await getJobStatus(jobId)

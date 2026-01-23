@@ -3,9 +3,10 @@
  * 支持后台异步生成音频
  */
 
-// 支持两种 Redis 连接方式
+// 支持多种 Redis 连接方式
 let kv: any
 let useKV = false
+let useIoredis = false
 
 // 初始化 Redis 客户端
 async function initRedis() {
@@ -15,10 +16,9 @@ async function initRedis() {
   console.log('[AudioQueue] 检查环境变量:')
   console.log('  KV_REST_API_URL:', process.env.KV_REST_API_URL ? '已配置' : '未配置')
   console.log('  KV_REST_API_TOKEN:', process.env.KV_REST_API_TOKEN ? '已配置' : '未配置')
-  console.log('  KV_URL:', process.env.KV_URL ? '已配置' : '未配置')
   console.log('  REDIS_URL:', process.env.REDIS_URL ? '已配置' : '未配置')
   if (process.env.REDIS_URL) {
-    console.log('  REDIS_URL 值前20字符:', process.env.REDIS_URL.substring(0, 20))
+    console.log('  REDIS_URL 值前30字符:', process.env.REDIS_URL.substring(0, 30))
   }
 
   // 优先使用 Vercel KV
@@ -34,28 +34,36 @@ async function initRedis() {
     }
   }
 
-  // 使用标准 REDIS_URL
+  // 使用标准 REDIS_URL（redis:// 或 rediss:// 协议）
   if (process.env.REDIS_URL && process.env.REDIS_URL !== 'null') {
     try {
-      const { Redis } = await import('@upstash/redis')
-      // 如果是 upstash redis URL
-      if (process.env.REDIS_URL.includes('upstash')) {
-        kv = new Redis({
-          url: process.env.REDIS_URL.split('?')[0],
-          token: process.env.REDIS_URL.split('?')[1]?.split('=')[1] || '',
-        })
-      } else {
-        // 标准 Redis URL (如 Redis Cloud, Railway 等)
-        const url = new URL(process.env.REDIS_URL)
+      const url = process.env.REDIS_URL
+
+      // 如果是 Upstash HTTP URL（https://）
+      if (url.includes('upstash') && (url.startsWith('https://') || url.startsWith('http://'))) {
         const { Redis } = await import('@upstash/redis')
+        // 解析 Upstash URL 格式: https://xxx.upstash.io 或带 token 的
+        const urlObj = new URL(url)
+        const token = urlObj.username || urlObj.password || ''
         kv = new Redis({
-          url: url.origin,
-          token: url.password || '',
+          url: urlObj.origin + urlObj.pathname,
+          token: token,
         })
+        useKV = false
+        console.log('[AudioQueue] 使用 Upstash Redis')
+        return
       }
-      useKV = false
-      console.log('[AudioQueue] 使用 REDIS_URL')
-      return
+
+      // 标准 Redis URL（redis:// 或 rediss://），使用 ioredis
+      if (url.startsWith('redis://') || url.startsWith('rediss://')) {
+        const Redis = (await import('ioredis')).default
+        kv = new Redis(url)
+        useIoredis = true
+        console.log('[AudioQueue] 使用 ioredis (标准 Redis)')
+        return
+      }
+
+      console.warn('[AudioQueue] 无法识别的 REDIS_URL 格式:', url.substring(0, 30))
     } catch (e) {
       console.warn('[AudioQueue] REDIS_URL 加载失败:', e)
     }
@@ -109,14 +117,18 @@ export async function enqueueAudioJob(date: string, script: string): Promise<str
     createdAt: now,
   }
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
+    // ioredis 使用 Promise 格式
+    await kv.set(`${AUDIO_JOB_PREFIX}${jobId}`, JSON.stringify(jobData))
+    await kv.zadd(`${AUDIO_QUEUE_PREFIX}pending`, Date.now(), jobId)
+  } else if (useKV && kv) {
     await kv.set(`${AUDIO_JOB_PREFIX}${jobId}`, JSON.stringify(jobData))
     await kv.zadd(`${AUDIO_QUEUE_PREFIX}pending`, {
       score: Date.now(),
       member: jobId,
     })
   } else if (kv) {
-    // 使用 @upstash/redis
+    // @upstash/redis
     await kv.set(`${AUDIO_JOB_PREFIX}${jobId}`, JSON.stringify(jobData))
     await kv.zadd(`${AUDIO_QUEUE_PREFIX}pending`, { score: Date.now(), member: jobId })
   } else {
@@ -165,7 +177,9 @@ export async function updateAudioJobStatus(
 
   const updated = { ...current, ...updates }
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
+    await kv.set(`${AUDIO_JOB_PREFIX}${jobId}`, JSON.stringify(updated))
+  } else if (useKV && kv) {
     await kv.set(`${AUDIO_JOB_PREFIX}${jobId}`, JSON.stringify(updated))
   } else if (kv) {
     await kv.set(`${AUDIO_JOB_PREFIX}${jobId}`, JSON.stringify(updated))
@@ -178,7 +192,10 @@ export async function updateAudioJobStatus(
 export async function getNextAudioJob(): Promise<string | null> {
   await initRedis()
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
+    const result = await kv.zrange(`${AUDIO_QUEUE_PREFIX}pending`, 0, 0)
+    return (result as string[])[0] || null
+  } else if (useKV && kv) {
     const result = await kv.zrange(`${AUDIO_QUEUE_PREFIX}pending`, 0, 0)
     return (result as string[])[0] || null
   } else if (kv) {
@@ -195,9 +212,31 @@ export async function getNextAudioJob(): Promise<string | null> {
 export async function getLatestAudioJob(date: string): Promise<AudioJob | null> {
   await initRedis()
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
     const allJobs = await kv.zrange(`${AUDIO_QUEUE_PREFIX}pending`, 0, -1)
-    
+
+    for (const jobId of allJobs as string[]) {
+      if (jobId.includes(date)) {
+        const status = await getAudioJobStatus(jobId)
+        if (status && (status.status === 'completed' || status.status === 'processing')) {
+          return status
+        }
+      }
+    }
+
+    // 检查已完成的任务
+    const pattern = `${AUDIO_JOB_PREFIX}${date}-*`
+    const completedKeys = await kv.keys(pattern)
+    for (const key of completedKeys as string[]) {
+      const jobId = key.replace(`${AUDIO_JOB_PREFIX}`, '')
+      const status = await getAudioJobStatus(jobId)
+      if (status?.status === 'completed') {
+        return status
+      }
+    }
+  } else if (useKV && kv) {
+    const allJobs = await kv.zrange(`${AUDIO_QUEUE_PREFIX}pending`, 0, -1)
+
     for (const jobId of allJobs as string[]) {
       if (jobId.includes(date)) {
         const status = await getAudioJobStatus(jobId)
@@ -218,7 +257,7 @@ export async function getLatestAudioJob(date: string): Promise<AudioJob | null> 
     }
   } else if (kv) {
     const allJobs = await kv.zrange(`${AUDIO_QUEUE_PREFIX}pending`, 0, -1)
-    
+
     for (const jobId of allJobs as string[]) {
       if (jobId.includes(date)) {
         const status = await getAudioJobStatus(jobId)
@@ -253,9 +292,23 @@ export async function cleanupAudioJobs(retentionDays: number = 7): Promise<numbe
   const now = Date.now()
   let cleaned = 0
 
-  if (useKV && kv) {
+  if (useIoredis && kv) {
     const allJobs = await kv.zrange(`${AUDIO_QUEUE_PREFIX}pending`, 0, -1)
-    
+
+    for (const jobId of allJobs as string[]) {
+      const status = await getAudioJobStatus(jobId)
+      if (status) {
+        const createdTime = new Date(status.createdAt).getTime()
+        if (now - createdTime > expireTime) {
+          await kv.del(`${AUDIO_JOB_PREFIX}${jobId}`)
+          await kv.zrem(`${AUDIO_QUEUE_PREFIX}pending`, jobId)
+          cleaned++
+        }
+      }
+    }
+  } else if (useKV && kv) {
+    const allJobs = await kv.zrange(`${AUDIO_QUEUE_PREFIX}pending`, 0, -1)
+
     for (const jobId of allJobs as string[]) {
       const status = await getAudioJobStatus(jobId)
       if (status) {
@@ -269,7 +322,7 @@ export async function cleanupAudioJobs(retentionDays: number = 7): Promise<numbe
     }
   } else if (kv) {
     const allJobs = await kv.zrange(`${AUDIO_QUEUE_PREFIX}pending`, 0, -1)
-    
+
     for (const jobId of allJobs as string[]) {
       const status = await getAudioJobStatus(jobId)
       if (status) {
