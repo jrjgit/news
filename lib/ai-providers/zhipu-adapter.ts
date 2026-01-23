@@ -159,7 +159,7 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
             },
           ],
           temperature: 0.7,
-          max_tokens: 500,
+          max_tokens: 1500, // 增加 token 限制，防止截断
           // @ts-ignore 智谱AI支持disable_thinking参数
           extra: {
             disable_thinking: true, // 禁用思考过程，加快响应
@@ -242,7 +242,7 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
             },
           ],
           temperature: 0.3,
-          max_tokens: 1000,
+          max_tokens: 4000, // 增加 token 限制，防止截断
           // @ts-ignore 智谱AI支持disable_thinking参数
           extra: {
             disable_thinking: true, // 禁用思考过程，加快响应
@@ -321,7 +321,7 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
             },
           ],
           temperature: 0.8,
-          max_tokens: 2000,
+          max_tokens: 4000, // 增加 token 限制，防止截断
           // @ts-ignore 智谱AI支持disable_thinking参数
           extra: {
             disable_thinking: true, // 禁用思考过程，加快响应
@@ -400,7 +400,7 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
             },
           ],
           temperature: 0.1,
-          max_tokens: 50,
+          max_tokens: 200, // 增加 token 限制，防止思考过程截断
           // @ts-ignore 智谱AI支持disable_thinking参数
           extra: {
             disable_thinking: true, // 禁用思考过程，加快响应
