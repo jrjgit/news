@@ -192,38 +192,47 @@ export class AIService {
   }
 
   /**
-   * 批量处理新闻摘要（串行处理，带延迟和速率限制）
+   * 批量处理新闻摘要（并行处理，带速率限制）
    */
   static async batchSummarizeNews(
     requests: NewsSummaryRequest[]
   ): Promise<AIServiceResponse<string[]>> {
     // 限制批量数量
     const limitedRequests = requests.slice(0, aiConfig.batchSize)
-    console.log(`批量摘要：处理 ${limitedRequests.length}/${requests.length} 条新闻`)
+    console.log(`批量摘要：并行处理 ${limitedRequests.length}/${requests.length} 条新闻`)
 
-    // 串行处理，每次一个请求，避免触发429错误
-    const results: string[] = []
+    // 并发控制：每批最多 5 个并发请求
+    const CONCURRENCY = 5
+    const results: string[] = new Array(limitedRequests.length)
 
-    for (const request of limitedRequests) {
-      try {
-        // 等待速率限制器
-        await waitForRateLimit()
+    // 分批并行处理
+    for (let i = 0; i < limitedRequests.length; i += CONCURRENCY) {
+      const batch = limitedRequests.slice(i, i + CONCURRENCY)
+      const batchStartIdx = i
 
-        const response = await this.summarizeNews(request)
-        if (response.success && response.data) {
-          results.push(response.data)
-        } else {
-          // 如果失败，使用原文作为摘要
-          results.push(request.content.substring(0, 200))
+      // 并行执行当前批次
+      const batchPromises = batch.map(async (request, batchIndex) => {
+        try {
+          // 等待速率限制器
+          await waitForRateLimit()
+
+          const response = await this.summarizeNews(request)
+          if (response.success && response.data) {
+            return response.data
+          } else {
+            return request.content.substring(0, 200)
+          }
+        } catch (error) {
+          console.error('摘要生成失败:', error)
+          return request.content.substring(0, 200)
         }
-      } catch (error) {
-        console.error('摘要生成失败:', error)
-        results.push(request.content.substring(0, 200))
-      }
+      })
 
-      // 每个请求之间延迟，避免触发频率限制
-      if (results.length < limitedRequests.length) {
-        await sleep(aiConfig.requestDelay)
+      const batchResults = await Promise.all(batchPromises)
+      
+      // 收集结果
+      for (let j = 0; j < batchResults.length; j++) {
+        results[batchStartIdx + j] = batchResults[j]
       }
     }
 
@@ -234,38 +243,47 @@ export class AIService {
   }
 
   /**
-   * 批量翻译（串行处理，带延迟和速率限制）
+   * 批量翻译（并行处理，带速率限制）
    */
   static async batchTranslate(
     requests: NewsTranslationRequest[]
   ): Promise<AIServiceResponse<string[]>> {
     // 限制批量数量
     const limitedRequests = requests.slice(0, aiConfig.batchSize)
-    console.log(`批量翻译：处理 ${limitedRequests.length}/${requests.length} 条新闻`)
+    console.log(`批量翻译：并行处理 ${limitedRequests.length}/${requests.length} 条新闻`)
 
-    // 串行处理，每次一个请求，避免触发429错误
-    const results: string[] = []
+    // 并发控制：每批最多 5 个并发请求
+    const CONCURRENCY = 5
+    const results: string[] = new Array(limitedRequests.length)
 
-    for (const request of limitedRequests) {
-      try {
-        // 等待速率限制器
-        await waitForRateLimit()
+    // 分批并行处理
+    for (let i = 0; i < limitedRequests.length; i += CONCURRENCY) {
+      const batch = limitedRequests.slice(i, i + CONCURRENCY)
+      const batchStartIdx = i
 
-        const response = await this.translateContent(request)
-        if (response.success && response.data) {
-          results.push(response.data)
-        } else {
-          // 如果失败，使用原文
-          results.push(request.content)
+      // 并行执行当前批次
+      const batchPromises = batch.map(async (request, batchIndex) => {
+        try {
+          // 等待速率限制器
+          await waitForRateLimit()
+
+          const response = await this.translateContent(request)
+          if (response.success && response.data) {
+            return response.data
+          } else {
+            return request.content
+          }
+        } catch (error) {
+          console.error('翻译失败:', error)
+          return request.content
         }
-      } catch (error) {
-        console.error('翻译失败:', error)
-        results.push(request.content)
-      }
+      })
 
-      // 每个请求之间延迟，避免触发频率限制
-      if (results.length < limitedRequests.length) {
-        await sleep(aiConfig.requestDelay)
+      const batchResults = await Promise.all(batchPromises)
+      
+      // 收集结果
+      for (let j = 0; j < batchResults.length; j++) {
+        results[batchStartIdx + j] = batchResults[j]
       }
     }
 

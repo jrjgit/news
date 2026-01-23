@@ -147,88 +147,46 @@ export async function syncNews(
 
     reportProgress('生成播报文案', 85, '播报文案生成完成')
 
-    // 步骤7: 生成音频
-    reportProgress('生成音频', 90, '开始生成音频...')
+    // 步骤7: 生成播报音频
+    reportProgress('生成音频', 90, '开始生成播报音频...')
 
     const audioUrl = await edgeTTS.generateDailyNewsAudio(script, dateStr)
-    console.log(`整体音频生成完成`)
+    console.log(`播报音频生成完成: ${audioUrl}`)
 
-    // 生成单条新闻音频
-    reportProgress('生成单条音频', 92, '正在生成单条新闻音频...')
-
-    // 分批处理，每批4个，减少并发压力
-    const batchSize = 4
-    const allResults: Array<{
-      news: NewsWithSummary
-      audioUrl: string | null
-      script: string
-      error: string | null
-    }> = []
-
-    for (let i = 0; i < newsWithImportance.length; i += batchSize) {
-      const batch = newsWithImportance.slice(i, i + batchSize)
-      const batchIndex = Math.floor(i / batchSize) + 1
-      const totalBatches = Math.ceil(newsWithImportance.length / batchSize)
-
-      console.log(`生成音频批次 ${batchIndex}/${totalBatches}，共 ${batch.length} 条`)
-
-      const audioPromises = batch.map(async (news, index) => {
-        const globalIndex = i + index
-        try {
-          const individualScript = newsGenerator.generateIndividualScript(news)
-          const newsAudioUrl = await edgeTTS.generateIndividualNewsAudio(individualScript, globalIndex + 1)
-          return { news, audioUrl: newsAudioUrl, script: individualScript, error: null }
-        } catch (error) {
-          console.error(`生成新闻 ${globalIndex + 1} 音频失败:`, error)
-          return {
-            news,
-            audioUrl: null,
-            script: newsGenerator.generateIndividualScript(news),
-            error: error instanceof Error ? error.message : String(error),
-          }
-        }
-      })
-
-      const batchResults = await Promise.all(audioPromises)
-      allResults.push(...batchResults)
-    }
-
-    // 统计失败的音频生成
-    const failedAudio = allResults.filter((r) => r.error).map((r) => r.error!)
-
-    // 保存到数据库
+    // 保存到数据库 - 批量写入
     reportProgress('保存数据', 95, '正在保存到数据库...')
 
-    const savedNews = []
-
-    for (const { news, audioUrl, script } of allResults) {
+    // 不再为每条新闻生成单独音频，只保存播报脚本的 audioUrl
+    const newsData = newsWithImportance.map((news) => {
       const newsWithSummary = news as NewsWithSummary
+      return {
+        title: news.title,
+        content: news.content,
+        summary: newsWithSummary.summary,
+        translatedContent: newsWithSummary.translatedContent,
+        originalLink: news.link,
+        source: news.source,
+        category: news.category,
+        importance: newsWithSummary.importance || 3,
+        newsDate: today,
+        audioUrl: undefined, // 不再保存单条音频
+        script: newsGenerator.generateIndividualScript(news), // 保留播报文案
+      }
+    })
 
-      const saved = await prisma.news.create({
-        data: {
-          title: news.title,
-          content: news.content,
-          summary: newsWithSummary.summary,
-          translatedContent: newsWithSummary.translatedContent,
-          originalLink: news.link,
-          source: news.source,
-          category: news.category,
-          importance: newsWithSummary.importance || 3,
-          newsDate: today,
-          audioUrl: audioUrl || undefined,
-          script,
-        },
-      })
+    // 使用 createMany 批量插入
+    const saved = await prisma.news.createMany({
+      data: newsData,
+    })
 
-      savedNews.push(saved)
-    }
+    const savedNewsCount = saved.count
 
     // 记录同步日志
     await prisma.syncLog.create({
       data: {
         syncDate: today,
         status: 'SUCCESS',
-        newsCount: savedNews.length,
+        newsCount: savedNewsCount,
       },
     })
 
@@ -237,13 +195,13 @@ export async function syncNews(
     await cleanupOldData(retentionDays)
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2)
-    console.log(`✅ 新闻同步完成，共保存 ${savedNews.length} 条新闻，耗时 ${duration} 秒`)
+    console.log(`✅ 新闻同步完成，共保存 ${savedNewsCount} 条新闻，耗时 ${duration} 秒`)
 
-    reportProgress('同步完成', 100, `成功保存 ${savedNews.length} 条新闻`)
+    reportProgress('同步完成', 100, `成功保存 ${savedNewsCount} 条新闻`)
 
     return {
       success: true,
-      newsGenerated: savedNews.length,
+      newsGenerated: savedNewsCount,
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : '未知错误'

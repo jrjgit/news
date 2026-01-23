@@ -104,18 +104,28 @@ export class RSSParser {
     const domesticSources = (process.env.RSS_SOURCES_DOMESTIC || '').split(',').filter(Boolean)
     const internationalSources = (process.env.RSS_SOURCES_INTERNATIONAL || '').split(',').filter(Boolean)
 
-    const allNews: NewsItem[] = []
+    const tasks: Promise<NewsItem[]>[] = []
 
-    // 获取国内新闻
+    // 并行获取国内新闻
     for (const source of domesticSources) {
-      const news = await this.parseRSSFeed(source.trim(), '国内新闻', 'DOMESTIC')
-      allNews.push(...news)
+      tasks.push(this.parseRSSFeed(source.trim(), '国内新闻', 'DOMESTIC'))
     }
 
-    // 获取国际新闻
+    // 并行获取国际新闻
     for (const source of internationalSources) {
-      const news = await this.parseRSSFeed(source.trim(), '国际新闻', 'INTERNATIONAL')
-      allNews.push(...news)
+      tasks.push(this.parseRSSFeed(source.trim(), '国际新闻', 'INTERNATIONAL'))
+    }
+
+    // 并行执行所有 RSS 获取任务
+    const results = await Promise.allSettled(tasks)
+    
+    const allNews: NewsItem[] = []
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        allNews.push(...result.value)
+      } else {
+        console.warn('RSS源获取失败:', result.reason)
+      }
     }
 
     // 去重

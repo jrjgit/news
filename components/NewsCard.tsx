@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import AudioPlayer from './AudioPlayer'
 
 interface News {
   id: number
@@ -114,13 +113,6 @@ export default function NewsCard({ news, isFavorite = false, onToggleFavorite }:
           )}
         </button>
       </div>
-
-      {/* 音频播放器 */}
-      {news.audioUrl && (
-        <div className="mt-4">
-          <AudioPlayer src={news.audioUrl} title={news.title} />
-        </div>
-      )}
 
       {/* 底部操作栏 */}
       <div className="mt-4 pt-4 border-t border-gray-700/50 flex items-center justify-between">

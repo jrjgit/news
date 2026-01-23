@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/Header'
 import NewsCard from '@/components/NewsCard'
 import SearchBar from '@/components/SearchBar'
+import AudioPlayer from '@/components/AudioPlayer'
 import FilterPanel, {
   SortOption,
   SortOrder,
@@ -23,9 +24,14 @@ interface News {
   script: string | null
 }
 
+// 请求缓存
+const requestCache = new Map<string, { data: News[]; timestamp: number }>()
+const CACHE_DURATION = 60 * 1000 // 缓存1分钟
+
 export default function Home() {
   const [news, setNews] = useState<News[]>([])
   const [loading, setLoading] = useState(true)
+  const [lastFetchParams, setLastFetchParams] = useState<string>('')
 
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
 
@@ -58,27 +64,42 @@ export default function Home() {
     )
   }
 
-  useEffect(() => {
-    fetchNews()
+  // 构建请求参数
+  const buildParams = useCallback(() => {
+    const params = new URLSearchParams({
+      date: selectedDate,
+      sortBy,
+      order: sortOrder,
+    })
+
+    if (categoryFilter !== 'ALL' && categoryFilter !== 'FAVORITES') {
+      params.append('category', categoryFilter)
+    }
+
+    return params.toString()
   }, [selectedDate, sortBy, sortOrder, categoryFilter])
 
-  const fetchNews = async () => {
+  const fetchNews = useCallback(async () => {
+    const params = buildParams()
+    
+    // 检查缓存
+    const now = Date.now()
+    const cached = requestCache.get(params)
+    if (cached && now - cached.timestamp < CACHE_DURATION && params === lastFetchParams) {
+      setNews(cached.data)
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
-      const params = new URLSearchParams({
-        date: selectedDate,
-        sortBy,
-        order: sortOrder,
-      })
-
-      if (categoryFilter !== 'ALL' && categoryFilter !== 'FAVORITES') {
-        params.append('category', categoryFilter)
-      }
-
-      const response = await fetch(`/api/news?${params.toString()}`)
+      const response = await fetch(`/api/news?${params}`)
       const data = await response.json()
 
       if (data.success) {
+        // 更新缓存
+        requestCache.set(params, { data: data.data, timestamp: now })
+        setLastFetchParams(params)
         setNews(data.data)
       } else {
         console.error('获取新闻失败:', data.error)
@@ -88,7 +109,11 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [buildParams, lastFetchParams])
+
+  useEffect(() => {
+    fetchNews()
+  }, [fetchNews])
 
   // 过滤和搜索新闻
   const filteredNews = news.filter((item) => {
@@ -112,6 +137,9 @@ export default function Home() {
 
   // 收藏的新闻
   const favoriteNews = filteredNews.filter((n) => favorites.includes(n.id))
+
+  // 播报音频 URL（根据日期构建）
+  const dailyAudioUrl = `/audio/daily-news-${selectedDate}.mp3`
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
@@ -182,6 +210,17 @@ export default function Home() {
             currentOrder={sortOrder}
             currentCategory={categoryFilter}
           />
+
+          {/* 统一播报音频播放器 */}
+          {!loading && filteredNews.length > 0 && (
+            <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 rounded-xl p-4 border border-blue-800/30">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-blue-400 font-medium">📻 今日新闻播报</span>
+                <span className="text-gray-500 text-sm">点击播放全部新闻</span>
+              </div>
+              <AudioPlayer src={dailyAudioUrl} title="今日新闻播报" />
+            </div>
+          )}
         </div>
 
         {/* 加载状态 */}
