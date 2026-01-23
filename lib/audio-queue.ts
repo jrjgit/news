@@ -11,6 +11,16 @@ let useKV = false
 async function initRedis() {
   if (kv) return
 
+  // 调试日志：打印所有可能的 Redis 环境变量
+  console.log('[AudioQueue] 检查环境变量:')
+  console.log('  KV_REST_API_URL:', process.env.KV_REST_API_URL ? '已配置' : '未配置')
+  console.log('  KV_REST_API_TOKEN:', process.env.KV_REST_API_TOKEN ? '已配置' : '未配置')
+  console.log('  KV_URL:', process.env.KV_URL ? '已配置' : '未配置')
+  console.log('  REDIS_URL:', process.env.REDIS_URL ? '已配置' : '未配置')
+  if (process.env.REDIS_URL) {
+    console.log('  REDIS_URL 值前20字符:', process.env.REDIS_URL.substring(0, 20))
+  }
+
   // 优先使用 Vercel KV
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     try {
@@ -25,7 +35,7 @@ async function initRedis() {
   }
 
   // 使用标准 REDIS_URL
-  if (process.env.REDIS_URL) {
+  if (process.env.REDIS_URL && process.env.REDIS_URL !== 'null') {
     try {
       const { Redis } = await import('@upstash/redis')
       // 如果是 upstash redis URL
