@@ -170,8 +170,41 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
 
       const chatResponse = response as OpenAI.ChatCompletion
       const message = chatResponse.choices[0]?.message as ZhipiChatCompletionMessage
-      // 只取最终回复content，忽略思考过程reasoning_content
-      const summary = message?.content?.trim() || message?.reasoning_content?.trim()
+
+      // 智谱AI Vision 模型响应解析
+      // 优先取 content，如果为空或包含思考过程指令，则尝试其他方式
+      let summary = ''
+
+      if (message?.content) {
+        // 如果 content 是字符串
+        if (typeof message.content === 'string') {
+          // 排除思考过程（通常是 "请分析以下内容并生成摘要" 等指令）
+          if (!message.content.includes('请分析用户请求') &&
+              !message.content.includes('角色：') &&
+              !message.content.includes('任务：') &&
+              !message.content.includes('约束：')) {
+            summary = message.content.trim()
+          }
+        }
+        // 如果 content 是数组（多模态响应），取文本部分
+        else if (Array.isArray(message.content)) {
+          const textPart = (message.content as Array<{ type: string; text?: string }>).find((p) => p.type === 'text')
+          if (textPart?.text) {
+            summary = textPart.text.trim()
+          }
+        }
+      }
+
+      // 如果 content 无效，尝试从 reasoning_content 获取
+      if (!summary && message?.reasoning_content) {
+        // reasoning_content 可能包含思考过程，需要过滤
+        const reasoning = message.reasoning_content.trim()
+        if (!reasoning.includes('请分析用户请求') &&
+            !reasoning.includes('角色：') &&
+            !reasoning.includes('任务：')) {
+          summary = reasoning
+        }
+      }
 
       if (!summary) {
         console.error('智谱AI: 未收到有效的摘要响应')
@@ -220,8 +253,34 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
 
       const chatResponse = response as OpenAI.ChatCompletion
       const message = chatResponse.choices[0]?.message as ZhipiChatCompletionMessage
-      // 只取最终回复content，忽略思考过程reasoning_content
-      const translation = message?.content?.trim() || message?.reasoning_content?.trim()
+
+      // 智谱AI Vision 模型响应解析
+      let translation = ''
+
+      if (message?.content) {
+        if (typeof message.content === 'string') {
+          if (!message.content.includes('请分析用户请求') &&
+              !message.content.includes('角色：') &&
+              !message.content.includes('任务：') &&
+              !message.content.includes('约束：')) {
+            translation = message.content.trim()
+          }
+        } else if (Array.isArray(message.content)) {
+          const textPart = (message.content as Array<{ type: string; text?: string }>).find((p) => p.type === 'text')
+          if (textPart?.text) {
+            translation = textPart.text.trim()
+          }
+        }
+      }
+
+      if (!translation && message?.reasoning_content) {
+        const reasoning = message.reasoning_content.trim()
+        if (!reasoning.includes('请分析用户请求') &&
+            !reasoning.includes('角色：') &&
+            !reasoning.includes('任务：')) {
+          translation = reasoning
+        }
+      }
 
       if (!translation) {
         console.error('智谱AI: 未收到有效的翻译响应')
@@ -275,8 +334,34 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
       console.log(`智谱AI: 收到响应，choices=${chatResponse.choices?.length}`)
 
       const message = chatResponse.choices[0]?.message as ZhipiChatCompletionMessage
-      // 只取最终回复content，忽略思考过程reasoning_content
-      const script = message?.content?.trim() || message?.reasoning_content?.trim()
+
+      // 智谱AI Vision 模型响应解析
+      let script = ''
+
+      if (message?.content) {
+        if (typeof message.content === 'string') {
+          if (!message.content.includes('请分析用户请求') &&
+              !message.content.includes('角色：') &&
+              !message.content.includes('任务：') &&
+              !message.content.includes('约束：')) {
+            script = message.content.trim()
+          }
+        } else if (Array.isArray(message.content)) {
+          const textPart = (message.content as Array<{ type: string; text?: string }>).find((p) => p.type === 'text')
+          if (textPart?.text) {
+            script = textPart.text.trim()
+          }
+        }
+      }
+
+      if (!script && message?.reasoning_content) {
+        const reasoning = message.reasoning_content.trim()
+        if (!reasoning.includes('请分析用户请求') &&
+            !reasoning.includes('角色：') &&
+            !reasoning.includes('任务：')) {
+          script = reasoning
+        }
+      }
 
       if (!script) {
         console.error('智谱AI: 未收到有效的脚本响应')
@@ -326,8 +411,34 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
 
       const chatResponse = response as OpenAI.ChatCompletion
       const message = chatResponse.choices[0]?.message as ZhipiChatCompletionMessage
-      // 只取最终回复content，忽略思考过程reasoning_content
-      const scoreText = message?.content?.trim() || message?.reasoning_content?.trim()
+
+      // 智谱AI Vision 模型响应解析
+      let scoreText = ''
+
+      if (message?.content) {
+        if (typeof message.content === 'string') {
+          if (!message.content.includes('请分析用户请求') &&
+              !message.content.includes('角色：') &&
+              !message.content.includes('任务：') &&
+              !message.content.includes('约束：')) {
+            scoreText = message.content.trim()
+          }
+        } else if (Array.isArray(message.content)) {
+          const textPart = (message.content as Array<{ type: string; text?: string }>).find((p) => p.type === 'text')
+          if (textPart?.text) {
+            scoreText = textPart.text.trim()
+          }
+        }
+      }
+
+      if (!scoreText && message?.reasoning_content) {
+        const reasoning = message.reasoning_content.trim()
+        if (!reasoning.includes('请分析用户请求') &&
+            !reasoning.includes('角色：') &&
+            !reasoning.includes('任务：')) {
+          scoreText = reasoning
+        }
+      }
 
       if (!scoreText) {
         console.error('智谱AI: 未收到有效的评分响应')
@@ -394,8 +505,17 @@ export class ZhipuAdapter extends BaseAIAdapter<ZhipiAdapterConfig> {
 
       const success = !!response.choices?.[0]?.message
       const message = response.choices?.[0]?.message as ZhipiChatCompletionMessage
-      // 只取最终回复content，忽略思考过程reasoning_content
-      const content = message?.content || '(空)'
+
+      // 健康检查只需验证连接，内容不重要
+      let content = '(空)'
+      if (message?.content) {
+        if (typeof message.content === 'string') {
+          content = message.content.substring(0, 20).replace(/\n/g, ' ')
+        } else if (Array.isArray(message.content)) {
+          const textPart = (message.content as Array<{ type: string; text?: string }>).find((p) => p.type === 'text')
+          content = textPart?.text?.substring(0, 20).replace(/\n/g, ' ') || '(空)'
+        }
+      }
 
       if (success) {
         console.log(`智谱AI健康检查通过，响应内容: "${content}"`)
