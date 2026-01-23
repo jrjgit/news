@@ -7,7 +7,7 @@ import cron from 'node-cron'
 import { prisma } from '@/lib/db'
 import { rssParser } from '@/lib/rss-parser'
 import { newsGenerator, NewsWithSummary } from '@/lib/news-generator'
-import { edgeTTS } from '@/lib/tts'
+import { enqueueAudioJob } from '@/lib/audio-queue'
 import { AIService } from '@/lib/ai-service'
 import { getRateLimitBackoff, sleep, isNonRetryableError } from '@/lib/config'
 import { isRateLimitError, isTimeoutError, CircuitBreaker } from '@/lib/circuit-breaker'
@@ -147,16 +147,17 @@ export async function syncNews(
 
     reportProgress('生成播报文案', 85, '播报文案生成完成')
 
-    // 步骤7: 生成播报音频
-    reportProgress('生成音频', 90, '开始生成播报音频...')
+    // 步骤7: 将音频生成加入后台队列（不再实时生成）
+    reportProgress('生成音频', 90, '音频生成已加入后台队列...')
 
-    const audioUrl = await edgeTTS.generateDailyNewsAudio(script, dateStr)
-    console.log(`播报音频生成完成: ${audioUrl}`)
+    // 将播报脚本加入音频生成队列
+    await enqueueAudioJob(dateStr, script)
+    console.log(`播报音频已加入后台队列`)
 
     // 保存到数据库 - 批量写入
     reportProgress('保存数据', 95, '正在保存到数据库...')
 
-    // 不再为每条新闻生成单独音频，只保存播报脚本的 audioUrl
+    // 不再为每条新闻生成单独音频
     const newsData = newsWithImportance.map((news) => {
       const newsWithSummary = news as NewsWithSummary
       return {
@@ -169,8 +170,8 @@ export async function syncNews(
         category: news.category,
         importance: newsWithSummary.importance || 3,
         newsDate: today,
-        audioUrl: undefined, // 不再保存单条音频
-        script: newsGenerator.generateIndividualScript(news), // 保留播报文案
+        audioUrl: undefined, // 音频生成完成后会更新
+        script: newsGenerator.generateIndividualScript(news),
       }
     })
 
@@ -190,7 +191,7 @@ export async function syncNews(
       },
     })
 
-    // 清理旧数据
+    // 清理旧数据（不移除音频，因为音频已通过队列管理）
     const retentionDays = parseInt(process.env.DATA_RETENTION_DAYS || '3')
     await cleanupOldData(retentionDays)
 
@@ -288,9 +289,6 @@ async function cleanupOldData(retentionDays: number) {
     },
   })
 
-  // 清理旧音频文件
-  await edgeTTS.cleanupOldAudio(retentionDays)
-
   console.log(`清理完成: 删除 ${deletedNews.count} 条新闻，${deletedLogs.count} 条日志`)
 }
 
@@ -314,7 +312,7 @@ if (require.main === module) {
   if (process.env.AI_SERVICE_PROVIDER) {
     AIService.initialize()
       .then(() => console.log('AI服务初始化成功'))
-      .catch((err) => console.warn('AI服务初始化失败:', err))
+      .catch((err) => console.warn('AI服务初始化失败:', err instanceof Error ? err.message : err))
   }
 
   syncNews()

@@ -28,10 +28,25 @@ interface News {
 const requestCache = new Map<string, { data: News[]; timestamp: number }>()
 const CACHE_DURATION = 60 * 1000 // 缓存1分钟
 
+// 音频状态
+interface AudioStatus {
+  status: 'not_generated' | 'pending' | 'processing' | 'completed'
+  audioUrl: string | null
+  progress: number
+}
+
 export default function Home() {
   const [news, setNews] = useState<News[]>([])
   const [loading, setLoading] = useState(true)
   const [lastFetchParams, setLastFetchParams] = useState<string>('')
+
+  // 音频状态
+  const [audioStatus, setAudioStatus] = useState<AudioStatus>({
+    status: 'not_generated',
+    audioUrl: null,
+    progress: 0,
+  })
+  const [audioLoading, setAudioLoading] = useState(false)
 
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
 
@@ -110,6 +125,54 @@ export default function Home() {
       setLoading(false)
     }
   }, [buildParams, lastFetchParams])
+
+  // 检查音频状态
+  const checkAudioStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/audio/status?date=${selectedDate}`)
+      const data = await response.json()
+
+      if (data.success && data.data) {
+        setAudioStatus({
+          status: data.data.status,
+          audioUrl: data.data.audioUrl,
+          progress: data.data.progress,
+        })
+      }
+    } catch (error) {
+      console.error('检查音频状态失败:', error)
+    }
+  }, [selectedDate])
+
+  // 触发音频生成
+  const triggerAudioGeneration = async () => {
+    try {
+      setAudioLoading(true)
+      const response = await fetch(`/api/audio/status?date=${selectedDate}`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        console.log('音频生成任务已加入队列')
+        // 开始轮询音频状态
+        checkAudioStatus()
+      } else {
+        console.error('触发音频生成失败:', data.error)
+      }
+    } catch (error) {
+      console.error('触发音频生成失败:', error)
+    } finally {
+      setAudioLoading(false)
+    }
+  }
+
+  // 定期检查音频状态
+  useEffect(() => {
+    checkAudioStatus()
+    const interval = setInterval(checkAudioStatus, 10000) // 每10秒检查一次
+    return () => clearInterval(interval)
+  }, [checkAudioStatus])
 
   useEffect(() => {
     fetchNews()
@@ -216,9 +279,47 @@ export default function Home() {
             <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 rounded-xl p-4 border border-blue-800/30">
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-blue-400 font-medium">📻 今日新闻播报</span>
-                <span className="text-gray-500 text-sm">点击播放全部新闻</span>
+                {audioStatus.status === 'completed' && audioStatus.audioUrl && (
+                  <span className="text-green-400 text-sm">✓ 音频已就绪</span>
+                )}
+                {audioStatus.status === 'processing' && (
+                  <span className="text-yellow-400 text-sm animate-pulse">生成中 {audioStatus.progress}%</span>
+                )}
+                {audioStatus.status === 'pending' && (
+                  <span className="text-yellow-400 text-sm">等待生成...</span>
+                )}
               </div>
-              <AudioPlayer src={dailyAudioUrl} title="今日新闻播报" />
+              
+              {audioStatus.status === 'completed' && audioStatus.audioUrl ? (
+                <AudioPlayer src={audioStatus.audioUrl} title="今日新闻播报" />
+              ) : (
+                <div className="flex items-center gap-3">
+                  {audioStatus.status === 'not_generated' ? (
+                    <button
+                      onClick={triggerAudioGeneration}
+                      disabled={audioLoading}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
+                    >
+                      {audioLoading ? (
+                        <>
+                          <span className="animate-spin">⏳</span>
+                          正在提交...
+                        </>
+                      ) : (
+                        <>
+                          <span>🎵</span>
+                          生成播报音频
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 text-gray-400">
+                      <span className="animate-spin">⏳</span>
+                      音频生成中，请稍候...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

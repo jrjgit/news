@@ -17,6 +17,8 @@ import {
   type SyncJobResult,
   type SyncProgress,
 } from './lib/job-queue'
+import { getNextAudioJob, updateAudioJobStatus, getAudioJobStatus } from './lib/audio-queue'
+import { edgeTTS } from './lib/tts'
 
 /**
  * 处理单个任务
@@ -92,7 +94,18 @@ async function runWorker(): Promise<void> {
 
   while (true) {
     try {
-      // 获取下一个待处理任务
+      // 优先处理音频任务（因为音频生成比较耗时，需要及时处理）
+      const audioJobId = await getNextAudioJob()
+      if (audioJobId) {
+        const audioStatus = await getAudioJobStatus(audioJobId)
+        if (audioStatus && audioStatus.status === 'pending') {
+          console.log('[Worker] 发现音频任务，优先处理')
+          await processAudioJob(audioJobId)
+          continue
+        }
+      }
+
+      // 处理新闻同步任务
       const jobId = await getNextPendingJob()
 
       if (jobId) {
@@ -116,25 +129,114 @@ async function runWorker(): Promise<void> {
 
 /**
  * 单次处理（适合 Vercel Serverless 函数）
+ * 如果没有待处理的任务，直接触发一次新闻同步
  */
-export async function processOneJob(): Promise<{ processed: boolean; jobId?: string; error?: string }> {
+export async function processOneJob(): Promise<{ processed: boolean; type?: string; jobId?: string; error?: string }> {
   try {
+    // 先检查是否有待处理的任务
     const jobId = await getNextPendingJob()
+
+    if (jobId) {
+      const status = await getJobStatus(jobId)
+      if (status && status.status === 'pending') {
+        await processJob(jobId)
+        return { processed: true, type: 'sync', jobId }
+      }
+    }
+
+    // 如果没有待处理的任务，直接执行新闻同步
+    console.log('[Worker] 没有待处理的任务，直接执行新闻同步')
+
+    const syncResult = await syncNews(
+      false,
+      10,
+      undefined,
+      aiCircuitBreaker
+    )
+
+    if (syncResult.success) {
+      console.log(`[Worker] 同步完成: ${syncResult.newsGenerated} 条新闻`)
+      return { processed: true, type: 'sync', jobId: `sync-${Date.now()}` }
+    } else {
+      console.error(`[Worker] 同步失败: ${syncResult.error}`)
+      return { processed: false, error: syncResult.error }
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('[Worker] 处理任务出错:', error)
+    return { processed: false, error: errorMessage }
+  }
+}
+
+/**
+ * 处理单个音频任务
+ */
+async function processAudioJob(jobId: string): Promise<void> {
+  console.log(`[Worker] 开始处理音频任务 ${jobId}`)
+
+  const status = await getAudioJobStatus(jobId)
+  if (!status) {
+    console.error(`[Worker] 音频任务 ${jobId} 不存在`)
+    return
+  }
+
+  try {
+    // 更新状态为处理中
+    await updateAudioJobStatus(jobId, {
+      status: 'processing',
+      progress: 10,
+    })
+
+    // 生成音频
+    const filename = `daily-news-${status.date}.mp3`
+    console.log(`[Worker] 开始生成音频: ${filename}, 脚本长度: ${status.script.length} 字`)
+
+    const audioUrl = await edgeTTS.generateDailyNewsAudio(status.script, status.date)
+
+    console.log(`[Worker] 音频生成完成: ${audioUrl}`)
+
+    // 更新为完成
+    await updateAudioJobStatus(jobId, {
+      status: 'completed',
+      progress: 100,
+      audioUrl,
+    })
+
+    console.log(`[Worker] 音频任务 ${jobId} 完成`)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error(`[Worker] 音频任务 ${jobId} 失败:`, error)
+
+    // 更新为失败
+    await updateAudioJobStatus(jobId, {
+      status: 'failed',
+      progress: 0,
+      error: errorMessage,
+    })
+  }
+}
+
+/**
+ * 处理一个音频任务（单次模式）
+ */
+export async function processOneAudioJob(): Promise<{ processed: boolean; jobId?: string; error?: string }> {
+  try {
+    const jobId = await getNextAudioJob()
 
     if (!jobId) {
       return { processed: false }
     }
 
-    const status = await getJobStatus(jobId)
+    const status = await getAudioJobStatus(jobId)
     if (status && status.status === 'pending') {
-      await processJob(jobId)
+      await processAudioJob(jobId)
       return { processed: true, jobId }
     }
 
     return { processed: false }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('[Worker] 处理任务出错:', error)
+    console.error('[Worker] 处理音频任务出错:', error)
     return { processed: false, error: errorMessage }
   }
 }

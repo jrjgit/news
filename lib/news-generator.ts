@@ -101,7 +101,7 @@ export class NewsGenerator {
   /**
    * 使用模板生成播报脚本（原有逻辑，作为后备）
    */
-  private generateTemplateScript(
+  generateTemplateScript(
     domesticNews: NewsItem[],
     internationalNews: NewsItem[]
   ): string {
