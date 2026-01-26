@@ -25,11 +25,17 @@ model News {
   newsDate          DateTime @map("news_date")
   audioUrl          String?  @map("audio_url")
   script            String?
+  
+  // 新增字段
+  audioGenerated    Boolean  @default(false)
+  audioTaskId       String?
+  
   createdAt         DateTime @default(now()) @map("created_at")
 
   @@index([newsDate])
   @@index([category])
   @@index([importance])
+  @@index([audioTaskId])
   @@map("news")
 }
 
@@ -44,6 +50,50 @@ model SyncLog {
   @@map("sync_logs")
 }
 
+// 音频任务模型
+model AudioTask {
+  id                String   @id @default(cuid())
+  status            TaskStatus @default(PENDING)
+  progress          Int      @default(0)
+  date              String   // YYYY-MM-DD
+  script            String   @db.Text
+  audioUrl          String?  // 分块音频URL列表，用 | 分隔
+  chunkCount        Int      @default(0)
+  currentChunk      Int      @default(0)
+  errorMessage      String?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // 关联的分块
+  audioChunks       AudioChunk[]
+  
+  @@index([status])
+  @@index([date])
+  @@index([createdAt])
+  @@map("audio_tasks")
+}
+
+// 音频分块模型（用于流式处理）
+model AudioChunk {
+  id                String   @id @default(cuid())
+  audioTaskId       String
+  chunkIndex        Int
+  blobUrl           String
+  size              Int
+  duration          Float?
+  status            TaskStatus @default(PENDING)
+  createdAt         DateTime @default(now())
+  
+  // 关联的音频任务
+  audioTask         AudioTask @relation(fields: [audioTaskId], references: [id], onDelete: Cascade)
+  
+  @@unique([audioTaskId, chunkIndex])
+  @@index([audioTaskId])
+  @@map("audio_chunks")
+}
+
 enum Category {
   DOMESTIC
   INTERNATIONAL
@@ -54,4 +104,13 @@ enum Status {
   FAILED
   PARTIAL
   IN_PROGRESS
+}
+
+// 任务状态枚举
+enum TaskStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
 }
