@@ -17,20 +17,26 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Sync API] 同步任务已创建: ${jobId}`)
 
-    // 触发后台处理（不等待）
+    // 触发立即处理（Serverless 环境）
     const baseUrl = process.env.VERCEL_URL 
       ? `https://${process.env.VERCEL_URL}` 
       : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
     
-    fetch(`${baseUrl}/api/sync/trigger`, {
+    // 先尝试直接处理（适合 Vercel Serverless）
+    fetch(`${baseUrl}/api/sync/process`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jobId }),
     }).catch((err) => {
-      console.warn('[Sync API] 触发后台处理失败:', err.message)
-      // 不影响主流程，Worker会兜底处理
+      console.warn('[Sync API] 直接处理失败，尝试触发 Worker:', err.message)
+      // 如果直接处理失败，尝试触发 Worker
+      fetch(`${baseUrl}/api/sync/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      }).catch((err2) => {
+        console.error('[Sync API] 触发 Worker 也失败:', err2.message)
+      })
     })
 
     return NextResponse.json({
