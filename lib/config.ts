@@ -59,27 +59,27 @@ export interface SyncConfig {
   stepDelay: number
 }
 
-// AI配置 - glm-4v 并发10个
+// AI配置 - 优化超时和批量大小以避免 Vercel 限制
 export const aiConfig: AIConfig = {
-  requestDelay: 2000, // 2秒延迟（并发10个 = 每2秒1个请求，更快）
-  requestTimeout: 60000, // 60秒超时（更长）
-  batchSize: 8, // 每次批量处理8条（充分利用并发）
-  maxRetries: 4, // 最多重试4次
-  // 渐进式退避：2s → 6s → 12s → 24s（更短）
-  retryDelays: [2000, 6000, 12000, 24000],
-  rateLimitBackoff: 30000, // 遇到速率限制时等待30秒（更短）
+  requestDelay: 1500, // 1.5秒延迟，更激进
+  requestTimeout: 30000, // 30秒超时，快速失败
+  batchSize: 5, // 减少批量大小，降低单次请求压力
+  maxRetries: 2, // 减少重试次数，快速失败
+  // 渐进式退避：1s → 3s（更短更激进）
+  retryDelays: [1000, 3000],
+  rateLimitBackoff: 15000, // 遇到速率限制时等待15秒
   rateLimitRequestsPerMinute: 10, // glm-4v 并发10个
   // 熔断器配置
   circuitBreaker: {
     failureThreshold: 3, // 连续3次失败开启熔断
-    timeout: 120000, // 2分钟后尝试恢复
+    timeout: 60000, // 1分钟后尝试恢复（更快恢复）
     halfOpenRequests: 2, // 半开状态下允许2个测试请求
   },
   // 任务队列配置
   jobQueue: {
     maxAttempts: 3, // 任务最多尝试3次
-    retryDelay: 60000, // 1分钟后重试任务
-    timeout: 600000, // 任务超时10分钟
+    retryDelay: 30000, // 30秒后重试任务
+    timeout: 300000, // 任务超时5分钟
   },
 }
 

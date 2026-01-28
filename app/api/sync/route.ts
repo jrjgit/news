@@ -1,65 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { syncNews, type SyncResult } from '@/cron/sync-news'
+import { enqueueSyncTask } from '@/lib/job-queue'
 
 export async function POST(request: NextRequest) {
-  const startTime = Date.now()
-  const timeoutMs = 250000 // 250秒，留5秒给超时响应
-
-  // 超时控制器
-  const timeoutController = new AbortController()
-  const timeoutId = setTimeout(() => {
-    timeoutController.abort()
-  }, timeoutMs)
-
   try {
-    console.log('[Sync API] 开始同步新闻...')
+    console.log('[Sync API] 创建异步同步任务...')
     
-    const result = await Promise.race([
-      syncNews(),
-      new Promise<SyncResult>((_, reject) => 
-        timeoutController.signal.addEventListener('abort', () => {
-          reject(new Error('同步超时'))
-        })
-      )
-    ]) as SyncResult
+    // 解析请求参数
+    const body = await request.json().catch(() => ({}))
+    const { forceRefresh = false } = body
+    
+    // 创建异步任务，立即返回任务ID
+    const jobId = await enqueueSyncTask({
+      forceRefresh,
+      createdAt: new Date().toISOString(),
+    })
 
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2)
+    console.log(`[Sync API] 同步任务已创建: ${jobId}`)
 
-    console.log(`[Sync API] 同步完成，耗时 ${duration}秒，生成 ${result.newsGenerated} 条新闻`)
+    // 触发后台处理（不等待）
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    
+    fetch(`${baseUrl}/api/sync/trigger`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ jobId }),
+    }).catch((err) => {
+      console.warn('[Sync API] 触发后台处理失败:', err.message)
+      // 不影响主流程，Worker会兜底处理
+    })
 
     return NextResponse.json({
-      success: result.success,
-      message: result.success ? '新闻同步成功' : '同步部分失败',
-      newsGenerated: result.newsGenerated,
-      duration: `${duration}秒`,
+      success: true,
+      message: '同步任务已创建',
+      jobId,
+      status: 'pending',
     })
   } catch (error) {
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2)
-    const errorMessage = error instanceof Error ? error.message : '同步失败'
-
-    console.error('[Sync API] 同步失败:', errorMessage)
-
-    // 如果是超时，返回特殊状态码
-    if (errorMessage.includes('超时')) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: '同步超时，请稍后重试',
-          duration: `${duration}秒`,
-        },
-        { status: 504 }
-      )
-    }
+    const errorMessage = error instanceof Error ? error.message : '创建同步任务失败'
+    console.error('[Sync API] 创建任务失败:', errorMessage)
 
     return NextResponse.json(
       {
         success: false,
         error: errorMessage,
-        duration: `${duration}秒`,
       },
       { status: 500 }
     )
-  } finally {
-    clearTimeout(timeoutId)
   }
 }

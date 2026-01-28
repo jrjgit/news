@@ -403,6 +403,69 @@ hr {
   }
 }
 
+/* 性能优化：GPU加速 */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* 内容可见性优化 - 延迟渲染不可见内容 */
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 500px;
+}
+
+/* 图片懒加载占位 */
+.img-lazy {
+  background: linear-gradient(110deg, #1f2937 8%, #374151 18%, #1f2937 33%);
+  background-size: 200% 100%;
+}
+
+/* 优化重绘区域 */
+.contain-layout {
+  contain: layout;
+}
+
+.contain-paint {
+  contain: paint;
+}
+
+.contain-strict {
+  contain: strict;
+}
+
+/* 虚拟列表容器 */
+.virtual-list {
+  overflow-y: auto;
+  overflow-x: hidden;
+  contain: strict;
+}
+
+/* 响应式图片 */
+.img-responsive {
+  max-width: 100%;
+  height: auto;
+  loading: lazy;
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    background: #374151;
+  }
+  
+  .animate-fade-in,
+  .animate-slide-in,
+  .animate-pulse-glow,
+  .animate-float {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Toast通知样式 */
 .toast {
   position: fixed;

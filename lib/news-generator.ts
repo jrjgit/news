@@ -277,9 +277,9 @@ export class NewsGenerator {
     }))
 
     try {
-      // 添加超时控制，120秒超时（增加超时时间）
+      // 添加超时控制，60秒超时（与配置一致）
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('批量生成摘要超时')), 120000)
+        setTimeout(() => reject(new Error('批量生成摘要超时')), 60000)
       )
 
       const startTime = Date.now()
@@ -328,9 +328,9 @@ export class NewsGenerator {
     }))
 
     try {
-      // 添加超时控制，120秒超时
+      // 添加超时控制，60秒超时（与配置一致）
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('批量翻译超时')), 120000)
+        setTimeout(() => reject(new Error('批量翻译超时')), 60000)
       )
 
       const startTime = Date.now()

@@ -65,24 +65,26 @@ export async function GET(request: NextRequest) {
       orderBy.push({ createdAt: 'desc' })
     }
 
-    // 查询新闻
+    // 查询新闻 - 添加分页限制避免大数据量查询超时
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100)
+    
     const news = await prisma.news.findMany({
       where,
       orderBy,
+      take: limit,
       select: {
         id: true,
         title: true,
-        content: true,
+        content: false, // 不返回完整内容，减少数据传输
         summary: true,
-        translatedContent: true,
+        translatedContent: false, // 不返回翻译内容
         originalLink: true,
         source: true,
         category: true,
         importance: true,
-
         newsDate: true,
         audioUrl: true,
-        script: true,
+        script: false, // 不返回脚本
         createdAt: true,
       },
     })
@@ -94,6 +96,7 @@ export async function GET(request: NextRequest) {
       meta: {
         sortBy,
         order,
+        limit,
       },
     })
   } catch (error) {

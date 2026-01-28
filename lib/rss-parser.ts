@@ -23,7 +23,13 @@ export class RSSParser {
   }
 
   async parseRSSFeed(url: string, source: string, category: 'DOMESTIC' | 'INTERNATIONAL'): Promise<NewsItem[]> {
+    // 根据分类设置不同超时：国内源通常更快更稳定
+    const timeoutMs = category === 'DOMESTIC' ? 10000 : 20000
+    
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+      
       // 手动获取 RSS 内容，添加完整的浏览器请求头
       const response = await fetch(url, {
         headers: {
@@ -38,8 +44,10 @@ export class RSSParser {
           'Sec-Fetch-Site': 'none',
           'Cache-Control': 'max-age=0',
         },
-        signal: AbortSignal.timeout(30000), // 减少超时时间到30秒
+        signal: controller.signal,
       })
+      
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         console.warn(`RSS源返回错误 ${response.status}: ${url}`)
@@ -78,7 +86,7 @@ export class RSSParser {
     } catch (error) {
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          console.warn(`RSS源请求超时: ${url}`)
+          console.warn(`RSS源超时(${timeoutMs}ms): ${url}`)
         } else if (error.message.includes('ENOTFOUND')) {
           console.warn(`RSS源DNS解析失败: ${url}`)
         } else {
@@ -104,31 +112,39 @@ export class RSSParser {
     const domesticSources = (process.env.RSS_SOURCES_DOMESTIC || '').split(',').filter(Boolean)
     const internationalSources = (process.env.RSS_SOURCES_INTERNATIONAL || '').split(',').filter(Boolean)
 
-    const tasks: Promise<NewsItem[]>[] = []
+    const allSources = [
+      ...domesticSources.map(url => ({ url: url.trim(), source: '国内新闻', category: 'DOMESTIC' as const })),
+      ...internationalSources.map(url => ({ url: url.trim(), source: '国际新闻', category: 'INTERNATIONAL' as const }))
+    ]
 
-    // 并行获取国内新闻
-    for (const source of domesticSources) {
-      tasks.push(this.parseRSSFeed(source.trim(), '国内新闻', 'DOMESTIC'))
-    }
-
-    // 并行获取国际新闻
-    for (const source of internationalSources) {
-      tasks.push(this.parseRSSFeed(source.trim(), '国际新闻', 'INTERNATIONAL'))
-    }
-
-    // 并行执行所有 RSS 获取任务
-    const results = await Promise.allSettled(tasks)
-    
+    // 控制并发数，避免同时发起过多请求
+    const CONCURRENCY = 3
     const allNews: NewsItem[] = []
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        allNews.push(...result.value)
-      } else {
-        console.warn('RSS源获取失败:', result.reason)
+    
+    for (let i = 0; i < allSources.length; i += CONCURRENCY) {
+      const batch = allSources.slice(i, i + CONCURRENCY)
+      
+      const batchPromises = batch.map(s => 
+        this.parseRSSFeed(s.url, s.source, s.category)
+      )
+      
+      const batchResults = await Promise.allSettled(batchPromises)
+      
+      batchResults.forEach((result, idx) => {
+        if (result.status === 'fulfilled') {
+          allNews.push(...result.value)
+        } else {
+          console.warn(`RSS源获取失败: ${batch[idx].url}`, result.reason)
+        }
+      })
+      
+      // 批次间添加短暂延迟，避免同时超时
+      if (i + CONCURRENCY < allSources.length) {
+        await new Promise(r => setTimeout(r, 300))
       }
     }
 
-    // 去重
+    console.log(`RSS获取完成: ${allSources.length}个源，成功获取${allNews.length}条新闻`)
     return this.deduplicateNews(allNews)
   }
 
