@@ -37,19 +37,20 @@ function splitText(text: string, maxLen: number): string[] {
 async function generateChunk(text: string, date: string, index: number): Promise<string> {
   try {
     console.log(`[TTS] 生成第 ${index + 1} 段，长度 ${text.length}`)
-    
-    // 动态导入
+
+    // 动态导入 edge-tts-universal
     const edgeTTS = await import('edge-tts-universal')
     const tts = new edgeTTS.EdgeTTS()
 
-    const audio = await tts.ttsPromise(text, 'zh-CN-XiaoxiaoNeural')
+    // 使用 tts() 方法，不是 ttsPromise()
+    const audio = await tts.tts(text, 'zh-CN-XiaoxiaoNeural')
     console.log(`[TTS] 第 ${index + 1} 段 TTS 完成，音频大小: ${audio?.length || 0}`)
-    
+
     const { url } = await put(`audio/${date}-${index}.mp3`, Buffer.from(audio), {
       access: 'public',
       contentType: 'audio/mp3',
     })
-    
+
     console.log(`[TTS] 第 ${index + 1} 段上传完成: ${url}`)
     return url
   } catch (error) {
