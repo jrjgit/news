@@ -20,7 +20,8 @@ export class NewsGenerator {
     // 检查各个AI功能是否启用
     this.aiSummaryEnabled = process.env.AI_ENABLE_SUMMARY !== 'false'
     this.aiTranslationEnabled = process.env.AI_ENABLE_TRANSLATION !== 'false'
-    this.aiImportanceEnabled = process.env.AI_ENABLE_IMPORTANCE !== 'false'
+    // 禁用重要性评估功能（智谱AI推理模型经常返回空content导致失败）
+    this.aiImportanceEnabled = false
 
     if (this.aiEnabled) {
       console.log('AI服务已启用，将使用AI生成播报脚本')
