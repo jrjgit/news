@@ -1,15 +1,3 @@
 {
-  "buildCommand": "prisma generate && prisma migrate deploy && next build",
-  "functions": {
-    "app/api/**": {
-      "memory": 1024,
-      "maxDuration": 300
-    }
-  },
-  "crons": [
-    {
-      "path": "/api/sync/cron",
-      "schedule": "0 18 * * *"
-    }
-  ]
+  "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build"
 }
