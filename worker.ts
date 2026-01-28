@@ -19,6 +19,7 @@ import {
 } from './lib/job-queue'
 import { getNextAudioJob, updateAudioJobStatus, getAudioJobStatus } from './lib/audio-queue'
 import { edgeTTS } from './lib/tts'
+import { prisma } from './lib/db'
 
 /**
  * 处理单个任务
@@ -180,16 +181,35 @@ async function processAudioJob(jobId: string): Promise<void> {
     return
   }
 
+  // 同时更新数据库中的 AudioTask 记录
+  const updateDbAudioTask = async (updates: { status?: string; progress?: number; audioUrl?: string; errorMessage?: string }) => {
+    try {
+      await prisma.audioTask.updateMany({
+        where: { date: status.date, status: { in: ['PENDING', 'PROCESSING'] } },
+        data: {
+          status: updates.status as any,
+          progress: updates.progress,
+          audioUrl: updates.audioUrl,
+          errorMessage: updates.errorMessage,
+          startedAt: updates.status === 'PROCESSING' ? new Date() : undefined,
+          finishedAt: updates.status === 'COMPLETED' || updates.status === 'FAILED' ? new Date() : undefined,
+        },
+      })
+    } catch (err) {
+      console.error('[Worker] 更新数据库 AudioTask 失败:', err)
+    }
+  }
+
   try {
     // 更新状态为处理中
     await updateAudioJobStatus(jobId, {
       status: 'processing',
       progress: 10,
     })
+    await updateDbAudioTask({ status: 'PROCESSING', progress: 10 })
 
     // 生成音频
-    const filename = `daily-news-${status.date}.mp3`
-    console.log(`[Worker] 开始生成音频: ${filename}, 脚本长度: ${status.script.length} 字`)
+    console.log(`[Worker] 开始生成音频: 日期=${status.date}, 脚本长度=${status.script.length}字`)
 
     const audioUrl = await edgeTTS.generateDailyNewsAudio(status.script, status.date)
 
@@ -201,6 +221,7 @@ async function processAudioJob(jobId: string): Promise<void> {
       progress: 100,
       audioUrl,
     })
+    await updateDbAudioTask({ status: 'COMPLETED', progress: 100, audioUrl })
 
     console.log(`[Worker] 音频任务 ${jobId} 完成`)
   } catch (error) {
@@ -213,6 +234,7 @@ async function processAudioJob(jobId: string): Promise<void> {
       progress: 0,
       error: errorMessage,
     })
+    await updateDbAudioTask({ status: 'FAILED', progress: 0, errorMessage })
   }
 }
 

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { newsGenerator } from '@/lib/news-generator'
+import { enqueueAudioJob } from '@/lib/audio-queue'
 
 /**
  * GET /api/audio/status?date=2026-01-23
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest) {
       }))
     )
 
-    // 创建音频生成任务
+    // 创建音频生成任务 (数据库)
     const audioTask = await prisma.audioTask.create({
       data: {
         date,
@@ -161,6 +162,15 @@ export async function POST(request: NextRequest) {
         status: 'PENDING',
       },
     })
+
+    // 同时入队到 Redis，让 Worker 处理
+    try {
+      await enqueueAudioJob(date, script)
+      console.log(`[Audio API] 任务已入队到 Redis: ${date}`)
+    } catch (error) {
+      console.error('[Audio API] 入队失败:', error)
+      // 入队失败不影响返回，数据库记录仍在，可以后续手动处理
+    }
 
     return NextResponse.json({
       success: true,
