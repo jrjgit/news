@@ -39,14 +39,19 @@ async function generateChunk(text: string, date: string, index: number): Promise
     console.log(`[TTS] 生成第 ${index + 1} 段，长度 ${text.length}`)
 
     // 动态导入 edge-tts-universal
-    const edgeTTS = await import('edge-tts-universal')
-    const tts = new edgeTTS.EdgeTTS()
+    const { EdgeTTS } = await import('edge-tts-universal')
 
-    // 使用 tts() 方法，不是 ttsPromise()
-    const audio = await tts.tts(text, 'zh-CN-XiaoxiaoNeural')
-    console.log(`[TTS] 第 ${index + 1} 段 TTS 完成，音频大小: ${audio?.length || 0}`)
+    // 正确用法：构造函数传入文本和语音，然后调用 synthesize()
+    const tts = new EdgeTTS(text, 'zh-CN-XiaoxiaoNeural')
+    const result = await tts.synthesize()
 
-    const { url } = await put(`audio/${date}-${index}.mp3`, Buffer.from(audio), {
+    // result.audio 是 Blob，需要转换为 Buffer
+    const arrayBuffer = await result.audio.arrayBuffer()
+    const audioBuffer = Buffer.from(arrayBuffer)
+
+    console.log(`[TTS] 第 ${index + 1} 段 TTS 完成，音频大小: ${audioBuffer.length}`)
+
+    const { url } = await put(`audio/${date}-${index}.mp3`, audioBuffer, {
       access: 'public',
       contentType: 'audio/mp3',
     })
