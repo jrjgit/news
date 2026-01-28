@@ -15,6 +15,19 @@ interface FilterPanelProps {
   currentCategory: CategoryFilter
 }
 
+const categoryOptions = [
+  { value: 'ALL' as CategoryFilter, label: '全部', icon: '⊕' },
+  { value: 'DOMESTIC' as CategoryFilter, label: '国内', icon: '◉' },
+  { value: 'INTERNATIONAL' as CategoryFilter, label: '国际', icon: '◎' },
+  { value: 'FAVORITES' as CategoryFilter, label: '收藏', icon: '♥' },
+]
+
+const sortOptions = [
+  { value: 'importance' as SortOption, label: '重要性' },
+  { value: 'createdAt' as SortOption, label: '发布时间' },
+  { value: 'newsDate' as SortOption, label: '新闻日期' },
+]
+
 export default function FilterPanel({
   onSortChange,
   onOrderChange,
@@ -25,114 +38,113 @@ export default function FilterPanel({
 }: FilterPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
-  const sortOptions = [
-    { value: 'importance' as SortOption, label: '重要性' },
-    { value: 'createdAt' as SortOption, label: '创建时间' },
-    { value: 'newsDate' as SortOption, label: '新闻日期' },
-  ]
-
-  const categoryOptions = [
-    { value: 'ALL' as CategoryFilter, label: '全部' },
-    { value: 'DOMESTIC' as CategoryFilter, label: '国内新闻' },
-    { value: 'INTERNATIONAL' as CategoryFilter, label: '国际新闻' },
-    { value: 'FAVORITES' as CategoryFilter, label: '我的收藏' },
-  ]
-
   return (
-    <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-700/50 overflow-hidden">
-      {/* 筛选按钮（移动端） */}
+    <div className="bg-zinc-900/50 rounded-2xl border border-white/[0.06] overflow-hidden">
+      {/* Mobile Toggle */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-4 py-3 flex items-center justify-between text-gray-300 hover:text-white transition-colors md:hidden"
+        className="w-full px-5 py-4 flex items-center justify-between text-zinc-400 hover:text-zinc-200 transition-colors md:hidden"
       >
-        <span className="flex items-center gap-2">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
           </svg>
-          筛选和排序
+          筛选与排序
         </span>
         <svg
-          className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
-      {/* 筛选内容 */}
-      <div className={`p-4 space-y-4 ${isExpanded ? 'block' : 'hidden md:block'}`}>
-        {/* 分类筛选 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">新闻分类</label>
-          <div className="flex flex-wrap gap-2">
-            {categoryOptions.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => onCategoryChange(option.value)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  currentCategory === option.value
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+      {/* Content */}
+      <div className={`${isExpanded ? 'block' : 'hidden md:block'}`}>
+        <div className="p-5 space-y-5">
+          {/* Category Filter */}
+          <div className="space-y-3">
+            <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">分类筛选</label>
+            <div className="flex flex-wrap gap-2">
+              {categoryOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => onCategoryChange(option.value)}
+                  className={`
+                    px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200
+                    flex items-center gap-2
+                    ${currentCategory === option.value
+                      ? 'bg-zinc-100 text-zinc-900 shadow-lg shadow-zinc-100/10'
+                      : 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border border-white/[0.06]'
+                    }
+                  `}
+                >
+                  <span className="opacity-70">{option.icon}</span>
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* 排序选项 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">排序方式</label>
-          <div className="flex flex-wrap gap-2">
-            {sortOptions.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => onSortChange(option.value)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  currentSort === option.value
-                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+          {/* Sort Options */}
+          <div className="space-y-3">
+            <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">排序方式</label>
+            <div className="flex flex-wrap gap-2">
+              {sortOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => onSortChange(option.value)}
+                  className={`
+                    px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200
+                    ${currentSort === option.value
+                      ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
+                      : 'bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border border-white/[0.06]'
+                    }
+                  `}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* 排序顺序 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">排序顺序</label>
-          <div className="flex gap-2">
-            <button
-              onClick={() => onOrderChange('desc')}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                currentOrder === 'desc'
-                  ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-              降序
-            </button>
-            <button
-              onClick={() => onOrderChange('asc')}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                currentOrder === 'asc'
-                  ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-              </svg>
-              升序
-            </button>
+          {/* Sort Order */}
+          <div className="flex items-center gap-3 pt-2 border-t border-white/[0.06]">
+            <span className="text-xs font-medium text-zinc-500">排序方向</span>
+            <div className="flex bg-zinc-800/50 rounded-lg p-1 border border-white/[0.06]">
+              <button
+                onClick={() => onOrderChange('desc')}
+                className={`
+                  px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5
+                  ${currentOrder === 'desc'
+                    ? 'bg-zinc-700 text-zinc-100 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                  }
+                `}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                </svg>
+                降序
+              </button>
+              <button
+                onClick={() => onOrderChange('asc')}
+                className={`
+                  px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5
+                  ${currentOrder === 'asc'
+                    ? 'bg-zinc-700 text-zinc-100 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                  }
+                `}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />
+                </svg>
+                升序
+              </button>
+            </div>
           </div>
         </div>
       </div>
