@@ -72,11 +72,11 @@ export default function Home() {
 
     // SSE 监听进度
     const es = new EventSource(`/api/job/stream?date=${date}`)
-    
+
     es.onmessage = (e) => {
       const data = JSON.parse(e.data)
       setProgress({ percent: data.progress, message: data.message })
-      
+
       if (data.status === 'completed' || data.status === 'failed' || data.status === 'done') {
         es.close()
         setGenerating(false)
@@ -88,6 +88,33 @@ export default function Home() {
     es.onerror = () => {
       es.close()
       setGenerating(false)
+    }
+  }
+
+  // 生成音频
+  const [audioGenerating, setAudioGenerating] = useState(false)
+
+  const generateAudio = async () => {
+    setAudioGenerating(true)
+    try {
+      const res = await fetch('/api/audio/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+      })
+      const data = await res.json()
+
+      if (data.success && data.audioUrls) {
+        setAudioUrls(data.audioUrls)
+      } else {
+        console.error('生成音频失败:', data.error)
+        alert(data.error || '生成音频失败')
+      }
+    } catch (error) {
+      console.error('生成音频错误:', error)
+      alert('生成音频失败，请重试')
+    } finally {
+      setAudioGenerating(false)
     }
   }
 
@@ -139,9 +166,13 @@ export default function Home() {
         )}
 
         {/* Audio Player */}
-        {audioUrls.length > 0 && (
+        {news.length > 0 && (
           <div className="mb-8">
-            <AudioPlayer urls={audioUrls} />
+            <AudioPlayer
+              urls={audioUrls}
+              onGenerate={audioUrls.length === 0 ? generateAudio : undefined}
+              generating={audioGenerating}
+            />
           </div>
         )}
 
