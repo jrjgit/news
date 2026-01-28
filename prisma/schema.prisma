@@ -20,6 +20,7 @@ model News {
   date        String   // YYYY-MM-DD
   audioUrl    String?  // Blob URL（第一段，兼容旧数据）
   audioUrls   String?  // 所有音频URL，JSON数组格式
+  script      String?  // 播报文案
   originalUrl String?
   createdAt   DateTime @default(now())
 
