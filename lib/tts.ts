@@ -19,8 +19,7 @@ export async function generateAudio(text: string, date: string, onChunk?: (url: 
 function splitText(text: string, maxLen: number): string[] {
   const chunks: string[] = []
   let current = ''
-  const sentences = text.split(/([。！？.!?
-])/)
+  const sentences = text.split(/([。！？.!?])/)
 
   for (let i = 0; i < sentences.length; i += 2) {
     const sentence = (sentences[i] || '') + (sentences[i + 1] || '')
