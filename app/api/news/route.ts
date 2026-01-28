@@ -2,7 +2,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
