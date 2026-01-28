@@ -18,7 +18,8 @@ model News {
   category    Category
   importance  Int      @default(3) // 1-5
   date        String   // YYYY-MM-DD
-  audioUrl    String?  // Blob URL
+  audioUrl    String?  // Blob URL（第一段，兼容旧数据）
+  audioUrls   String?  // 所有音频URL，JSON数组格式
   originalUrl String?
   createdAt   DateTime @default(now())
 

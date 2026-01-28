@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
       category: true,
       importance: true,
       audioUrl: true,
+      audioUrls: true,
     },
   })
 

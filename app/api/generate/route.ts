@@ -78,10 +78,13 @@ export async function POST(req: NextRequest) {
       updateJob(job.id, progress, `音频片段 ${idx + 1}`).catch(console.error)
     })
 
-    // 7. 完成
+    // 7. 完成 - 存储所有音频URL
     await prisma.news.updateMany({
       where: { date },
-      data: { audioUrl: audioUrls[0] }, // 存第一段
+      data: { 
+        audioUrl: audioUrls[0],
+        audioUrls: JSON.stringify(audioUrls)
+      },
     })
 
     await updateJob(job.id, 100, '完成', allNews.length)

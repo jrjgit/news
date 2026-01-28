@@ -12,6 +12,7 @@ interface News {
   category: 'DOMESTIC' | 'INTERNATIONAL'
   importance: number
   audioUrl: string | null
+  audioUrls: string | null
 }
 
 export default function Home() {
@@ -20,7 +21,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState({ percent: 0, message: '' })
-  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [audioUrls, setAudioUrls] = useState<string[]>([])
 
   // 加载新闻
   const loadNews = useCallback(async () => {
@@ -29,7 +30,20 @@ export default function Home() {
       const res = await fetch(`/api/news?date=${date}`)
       const data = await res.json()
       setNews(data.news || [])
-      setAudioUrl(data.news?.[0]?.audioUrl || null)
+      
+      // 解析音频URLs
+      const firstNews = data.news?.[0]
+      if (firstNews?.audioUrls) {
+        try {
+          setAudioUrls(JSON.parse(firstNews.audioUrls))
+        } catch {
+          setAudioUrls(firstNews.audioUrl ? [firstNews.audioUrl] : [])
+        }
+      } else if (firstNews?.audioUrl) {
+        setAudioUrls([firstNews.audioUrl])
+      } else {
+        setAudioUrls([])
+      }
     } finally {
       setLoading(false)
     }
@@ -119,9 +133,9 @@ export default function Home() {
         )}
 
         {/* Audio Player */}
-        {audioUrl && (
+        {audioUrls.length > 0 && (
           <div className="mb-8">
-            <AudioPlayer url={audioUrl} />
+            <AudioPlayer urls={audioUrls} />
           </div>
         )}
 
