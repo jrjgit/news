@@ -1,17 +1,30 @@
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
--- CreateEnum
-CREATE TYPE "Category" AS ENUM ('DOMESTIC', 'INTERNATIONAL');
+-- CreateEnum (if not exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'Category') THEN
+        CREATE TYPE "Category" AS ENUM ('DOMESTIC', 'INTERNATIONAL');
+    END IF;
+END $$;
 
--- CreateEnum
-CREATE TYPE "Status" AS ENUM ('SUCCESS', 'FAILED', 'PARTIAL', 'IN_PROGRESS');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'Status') THEN
+        CREATE TYPE "Status" AS ENUM ('SUCCESS', 'FAILED', 'PARTIAL', 'IN_PROGRESS');
+    END IF;
+END $$;
 
--- CreateEnum
-CREATE TYPE "TaskStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TaskStatus') THEN
+        CREATE TYPE "TaskStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED');
+    END IF;
+END $$;
 
 -- CreateTable
-CREATE TABLE "news" (
+CREATE TABLE IF NOT EXISTS "news" (
     "id" SERIAL NOT NULL,
     "title" TEXT NOT NULL,
     "content" TEXT NOT NULL,
@@ -32,7 +45,7 @@ CREATE TABLE "news" (
 );
 
 -- CreateTable
-CREATE TABLE "sync_logs" (
+CREATE TABLE IF NOT EXISTS "sync_logs" (
     "id" SERIAL NOT NULL,
     "sync_date" TIMESTAMP(3) NOT NULL,
     "status" "Status" NOT NULL,
@@ -44,7 +57,7 @@ CREATE TABLE "sync_logs" (
 );
 
 -- CreateTable
-CREATE TABLE "audio_tasks" (
+CREATE TABLE IF NOT EXISTS "audio_tasks" (
     "id" TEXT NOT NULL,
     "status" "TaskStatus" NOT NULL DEFAULT 'PENDING',
     "progress" INTEGER NOT NULL DEFAULT 0,
@@ -63,7 +76,7 @@ CREATE TABLE "audio_tasks" (
 );
 
 -- CreateTable
-CREATE TABLE "audio_chunks" (
+CREATE TABLE IF NOT EXISTS "audio_chunks" (
     "id" TEXT NOT NULL,
     "audioTaskId" TEXT NOT NULL,
     "chunkIndex" INTEGER NOT NULL,
@@ -76,35 +89,45 @@ CREATE TABLE "audio_chunks" (
     CONSTRAINT "audio_chunks_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX "news_news_date_idx" ON "news"("news_date");
+-- CreateIndex (if not exists)
+CREATE INDEX IF NOT EXISTS "news_news_date_idx" ON "news"("news_date");
 
 -- CreateIndex
-CREATE INDEX "news_category_idx" ON "news"("category");
+CREATE INDEX IF NOT EXISTS "news_category_idx" ON "news"("category");
 
 -- CreateIndex
-CREATE INDEX "news_importance_idx" ON "news"("importance");
+CREATE INDEX IF NOT EXISTS "news_importance_idx" ON "news"("importance");
 
 -- CreateIndex
-CREATE INDEX "news_audioTaskId_idx" ON "news"("audioTaskId");
+CREATE INDEX IF NOT EXISTS "news_audioTaskId_idx" ON "news"("audioTaskId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "sync_logs_sync_date_key" ON "sync_logs"("sync_date");
+CREATE UNIQUE INDEX IF NOT EXISTS "sync_logs_sync_date_key" ON "sync_logs"("sync_date");
 
 -- CreateIndex
-CREATE INDEX "audio_tasks_status_idx" ON "audio_tasks"("status");
+CREATE INDEX IF NOT EXISTS "audio_tasks_status_idx" ON "audio_tasks"("status");
 
 -- CreateIndex
-CREATE INDEX "audio_tasks_date_idx" ON "audio_tasks"("date");
+CREATE INDEX IF NOT EXISTS "audio_tasks_date_idx" ON "audio_tasks"("date");
 
 -- CreateIndex
-CREATE INDEX "audio_tasks_createdAt_idx" ON "audio_tasks"("createdAt");
+CREATE INDEX IF NOT EXISTS "audio_tasks_createdAt_idx" ON "audio_tasks"("createdAt");
 
 -- CreateIndex
-CREATE INDEX "audio_chunks_audioTaskId_idx" ON "audio_chunks"("audioTaskId");
+CREATE INDEX IF NOT EXISTS "audio_chunks_audioTaskId_idx" ON "audio_chunks"("audioTaskId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "audio_chunks_audioTaskId_chunkIndex_key" ON "audio_chunks"("audioTaskId", "chunkIndex");
+CREATE UNIQUE INDEX IF NOT EXISTS "audio_chunks_audioTaskId_chunkIndex_key" ON "audio_chunks"("audioTaskId", "chunkIndex");
 
--- AddForeignKey
-ALTER TABLE "audio_chunks" ADD CONSTRAINT "audio_chunks_audioTaskId_fkey" FOREIGN KEY ("audioTaskId") REFERENCES "audio_tasks"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- AddForeignKey (if not exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'audio_chunks_audioTaskId_fkey'
+    ) THEN
+        ALTER TABLE "audio_chunks" ADD CONSTRAINT "audio_chunks_audioTaskId_fkey" 
+        FOREIGN KEY ("audioTaskId") REFERENCES "audio_tasks"("id") 
+        ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;
