@@ -71,12 +71,21 @@ export async function POST(req: NextRequest) {
 
     // 6. 生成音频 (70-100%)
     await updateJob(job.id, 70, '生成音频...')
-    const audioUrls: string[] = []
-    await generateAudio(script, date, (url, idx) => {
-      audioUrls.push(url)
-      const progress = 70 + Math.floor(((idx + 1) / 5) * 25)
-      updateJob(job.id, progress, `音频片段 ${idx + 1}`).catch(console.error)
-    })
+    let audioUrls: string[] = []
+    try {
+      console.log(`[Generate] 开始生成音频，脚本长度: ${script.length}`)
+      const estimatedChunks = Math.ceil(script.length / 300)
+      await generateAudio(script, date, (url, idx) => {
+        audioUrls.push(url)
+        console.log(`[Generate] 音频片段 ${idx + 1} 完成: ${url}`)
+        const progress = 70 + Math.floor(((idx + 1) / Math.max(estimatedChunks, 1)) * 25)
+        updateJob(job.id, progress, `音频片段 ${idx + 1}`).catch(console.error)
+      })
+      console.log(`[Generate] 音频生成完成，共 ${audioUrls.length} 段`)
+    } catch (audioError) {
+      console.error('[Generate] 音频生成失败:', audioError)
+      // 继续，只是没有音频
+    }
 
     // 7. 完成 - 存储所有音频URL
     await prisma.news.updateMany({
@@ -101,8 +110,12 @@ export async function POST(req: NextRequest) {
 }
 
 async function updateJob(id: string, progress: number, message: string, count?: number) {
-  await prisma.syncJob.update({
-    where: { id },
-    data: { progress, message, newsCount: count },
-  })
+  try {
+    await prisma.syncJob.update({
+      where: { id },
+      data: { progress, message, newsCount: count },
+    })
+  } catch (e) {
+    console.log(`[Job ${id}] 更新失败，可能任务不存在:`, e)
+  }
 }

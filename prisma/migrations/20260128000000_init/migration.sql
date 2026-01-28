@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS "news" (
     "importance" INTEGER NOT NULL DEFAULT 3,
     "date" TEXT NOT NULL,
     "audioUrl" TEXT,
+    "audioUrls" TEXT,
     "originalUrl" TEXT,
     "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

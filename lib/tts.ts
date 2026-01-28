@@ -35,15 +35,25 @@ function splitText(text: string, maxLen: number): string[] {
 }
 
 async function generateChunk(text: string, date: string, index: number): Promise<string> {
-  const { EdgeTTS } = await import('edge-tts-universal')
-  const tts = new EdgeTTS()
+  try {
+    console.log(`[TTS] 生成第 ${index + 1} 段，长度 ${text.length}`)
+    
+    // 动态导入
+    const edgeTTS = await import('edge-tts-universal')
+    const tts = new edgeTTS.EdgeTTS()
 
-  const audio = await tts.ttsPromise(text, 'zh-CN-XiaoxiaoNeural')
-  
-  const { url } = await put(`audio/${date}-${index}.mp3`, Buffer.from(audio), {
-    access: 'public',
-    contentType: 'audio/mp3',
-  })
-
-  return url
+    const audio = await tts.ttsPromise(text, 'zh-CN-XiaoxiaoNeural')
+    console.log(`[TTS] 第 ${index + 1} 段 TTS 完成，音频大小: ${audio?.length || 0}`)
+    
+    const { url } = await put(`audio/${date}-${index}.mp3`, Buffer.from(audio), {
+      access: 'public',
+      contentType: 'audio/mp3',
+    })
+    
+    console.log(`[TTS] 第 ${index + 1} 段上传完成: ${url}`)
+    return url
+  } catch (error) {
+    console.error(`[TTS] 第 ${index + 1} 段生成失败:`, error)
+    throw error
+  }
 }

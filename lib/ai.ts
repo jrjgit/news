@@ -23,10 +23,16 @@ ${news.map((n, i) => `${i + 1}. ${n.title}`).join('\n')}`
 }
 
 async function chat(prompt: string): Promise<string> {
+  if (!API_KEY) {
+    console.warn('[AI] 未配置 API Key')
+    return prompt.slice(0, 80) + '...'
+  }
+
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 20000)
 
   try {
+    console.log(`[AI] 调用 API: ${BASE_URL}`)
     const res = await fetch(`${BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -44,13 +50,18 @@ async function chat(prompt: string): Promise<string> {
     clearTimeout(timer)
 
     if (!res.ok) {
+      const errorText = await res.text()
+      console.error(`[AI] API error: ${res.status}`, errorText)
       throw new Error(`AI API error: ${res.status}`)
     }
 
     const data = await res.json()
-    return data.choices?.[0]?.message?.content?.trim() || ''
+    const result = data.choices?.[0]?.message?.content?.trim() || ''
+    console.log(`[AI] 响应成功，长度: ${result.length}`)
+    return result
   } catch (e) {
     clearTimeout(timer)
+    console.error('[AI] 调用失败:', e)
     // 失败返回原文摘要
     return prompt.slice(0, 80) + '...'
   }

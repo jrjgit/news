@@ -29,14 +29,19 @@ export default function Home() {
     try {
       const res = await fetch(`/api/news?date=${date}`)
       const data = await res.json()
+      console.log('[Page] 加载新闻:', data)
       setNews(data.news || [])
       
       // 解析音频URLs
       const firstNews = data.news?.[0]
+      console.log('[Page] 第一条新闻:', firstNews)
       if (firstNews?.audioUrls) {
         try {
-          setAudioUrls(JSON.parse(firstNews.audioUrls))
-        } catch {
+          const urls = JSON.parse(firstNews.audioUrls)
+          console.log('[Page] 解析音频URLs:', urls)
+          setAudioUrls(urls)
+        } catch (e) {
+          console.error('[Page] 解析音频URLs失败:', e)
           setAudioUrls(firstNews.audioUrl ? [firstNews.audioUrl] : [])
         }
       } else if (firstNews?.audioUrl) {
@@ -75,7 +80,8 @@ export default function Home() {
       if (data.status === 'completed' || data.status === 'failed' || data.status === 'done') {
         es.close()
         setGenerating(false)
-        loadNews()
+        // 延迟一下再加载，确保数据库已更新
+        setTimeout(() => loadNews(), 500)
       }
     }
 
